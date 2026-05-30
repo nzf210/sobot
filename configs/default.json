@@ -1,0 +1,7 @@
+{
+  "min_liquidity_usd": 10000,
+  "max_positions": 5,
+  "sniper_size_sol": 0.1,
+  "llm_enabled": true,
+  "daily_loss_limit": 2
+}

@@ -1,0 +1,89 @@
+# General OS & Editor Files
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*~
+.idea/
+.vscode/
+.antigravitycli/
+
+# ------------------------------------------------------------------------------
+# SECRETS & CREDENTIALS (CRITICAL)
+# ------------------------------------------------------------------------------
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+!.env.sample
+
+# Solana/Wallet Keypairs and encrypted files
+*.enc
+wallet.enc
+wallet.json
+*keypair*.json
+id.json
+
+# SSL Certificates / SSH Keys
+*.pem
+*.key
+*.crt
+*.cert
+
+# Other common secret files
+secrets.json
+credentials.json
+
+# ------------------------------------------------------------------------------
+# DATABASES
+# ------------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+data/
+db/
+
+# ------------------------------------------------------------------------------
+# LOGS
+# ------------------------------------------------------------------------------
+*.log
+logs/
+
+# ------------------------------------------------------------------------------
+# GO BACKEND (backend-go/)
+# ------------------------------------------------------------------------------
+backend-go/hybrid-solana-bot
+backend-go/main
+backend-go/bin/
+backend-go/obj/
+backend-go/out/
+*.exe
+*.test
+*.prof
+
+# ------------------------------------------------------------------------------
+# NODE.JS / TYPESCRIPT (executor-ts/ & frontend/)
+# ------------------------------------------------------------------------------
+node_modules/
+dist/
+build/
+out/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ------------------------------------------------------------------------------
+# AI/ML & PYTHON (If added later)
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env/
