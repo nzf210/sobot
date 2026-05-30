@@ -1,9 +1,7 @@
 package scanner
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"time"
 
 	"go.uber.org/zap"
@@ -15,71 +13,55 @@ import (
 	"hybrid-solana-bot/internal/orchestrator"
 )
 
-type TokenProfile struct {
-	ChainId      string `json:"chainId"`
-	TokenAddress string `json:"tokenAddress"`
-}
-
 type Scanner struct {
-	cfg      config.Config
-	orch     *orchestrator.Orchestrator
-	mem      *memory.MemoryStore
-	log      *zap.Logger
-	seen     map[string]bool
-	notifier *notifier.TelegramNotifier
+	cfg         config.Config
+	orch        *orchestrator.Orchestrator
+	mem         *memory.MemoryStore
+	log         *zap.Logger
+	seen        *seenWithTTL
+	notifier    *notifier.TelegramNotifier
+	tokenChan   chan string
+	pumpWatcher *PumpFunWatcher
+	raydWatcher *RaydiumWatcher
+	meteWatcher *MeteoraWatcher
 }
 
 func NewScanner(cfg config.Config, orch *orchestrator.Orchestrator, mem *memory.MemoryStore, log *zap.Logger) *Scanner {
-	return &Scanner{
-		cfg:      cfg,
-		orch:     orch,
-		mem:      mem,
-		log:      log,
-		seen:     make(map[string]bool),
-		notifier: notifier.NewTelegramNotifier(cfg.TelegramBotToken, cfg.TelegramWhitelistUserIDs),
+	tokenChan := make(chan string, 100)
+
+	s := &Scanner{
+		cfg:         cfg,
+		orch:        orch,
+		mem:         mem,
+		log:         log,
+		seen:        newSeenWithTTL(24 * time.Hour),
+		notifier:    notifier.NewTelegramNotifier(cfg.TelegramBotToken, cfg.TelegramWhitelistUserIDs),
+		tokenChan:   tokenChan,
+		pumpWatcher: NewPumpFunWatcher(log, tokenChan),
+		raydWatcher: NewRaydiumWatcher(log, tokenChan),
+		meteWatcher: NewMeteoraWatcher(log, tokenChan),
 	}
+
+	// Start worker pool (4 workers)
+	for i := 0; i < 4; i++ {
+		go s.worker()
+	}
+
+	return s
 }
 
 func (s *Scanner) Start() {
-	s.log.Info("Starting automatic new token scanner")
-	for {
-		userCfg := s.mem.GetUserConfig()
-		if !userCfg.AutoTrade {
-			time.Sleep(5 * time.Second)
-			continue
-		}
+	s.log.Info("Starting multi-source token scanner (Pump.fun, Raydium, Meteora)")
 
-		interval := userCfg.ScannerIntervalSec
-		if interval < 5 {
-			interval = 5 // minimum safety
-		}
-		
-		s.scanLatest()
-		time.Sleep(time.Duration(interval) * time.Second)
-	}
+	go s.pumpWatcher.Start()
+	go s.raydWatcher.Start()
+	go s.meteWatcher.Start()
 }
 
-func (s *Scanner) scanLatest() {
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("https://api.dexscreener.com/token-profiles/latest/v1")
-	if err != nil {
-		s.log.Error("Scanner failed to fetch latest profiles", zap.Error(err))
-		return
-	}
-	defer resp.Body.Close()
-
-	var profiles []TokenProfile
-	if err := json.NewDecoder(resp.Body).Decode(&profiles); err != nil {
-		s.log.Error("Scanner failed to parse profiles", zap.Error(err))
-		return
-	}
-
-	for _, p := range profiles {
-		if p.ChainId == "solana" {
-			if !s.seen[p.TokenAddress] {
-				s.seen[p.TokenAddress] = true
-				go s.processNewToken(p.TokenAddress)
-			}
+func (s *Scanner) worker() {
+	for token := range s.tokenChan {
+		if s.seen.add(token) {
+			s.processNewToken(token)
 		}
 	}
 }
@@ -87,7 +69,6 @@ func (s *Scanner) scanLatest() {
 func (s *Scanner) processNewToken(token string) {
 	s.log.Info("Scanner detected new Solana token", zap.String("token", token))
 
-	// Give it a brief delay before fetching metrics, as liquidity might take a few seconds to appear
 	time.Sleep(3 * time.Second)
 
 	metricsData, err := metrics.FetchTokenMetrics(token)
@@ -97,15 +78,17 @@ func (s *Scanner) processNewToken(token string) {
 	}
 
 	result := s.orch.Process(metricsData)
-	
-	// Convert result to map to check status
-	resMap, ok := result.(map[string]interface{})
-	if ok && resMap["status"] == "approved" {
-		msg := fmt.Sprintf("🚨 *AUTOSCAN: New Token Approved!*\n*Token:* `%s`\n*Liquidity:* $%.2f\n*Result:* %+v", 
-			token, metricsData.LiquidityUSD, result)
+
+	if result.Approved {
+		msg := fmt.Sprintf("🚨 *AUTOSCAN: New Token Approved!*\n*Token:* `%s`\n*Confidence:* %.0f%%\n*Size:* %.4f SOL\n*LLM:* %s\n*Liquidity:* $%.2f",
+			token, result.ConfidenceScore*100, result.RecommendedSizeSOL, result.LLMDecision, metricsData.LiquidityUSD)
 		if err := s.notifier.SendMessage(msg); err != nil {
 			s.log.Error("Autoscan telegram failed", zap.Error(err))
 		}
 		s.log.Info("Autoscan approved token", zap.String("token", token))
+	} else if result.RejectedBy != "" {
+		s.log.Info("Autoscan rejected token",
+			zap.String("token", token),
+			zap.String("reason", result.RejectedBy))
 	}
 }

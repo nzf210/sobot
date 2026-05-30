@@ -1,0 +1,21 @@
+{
+  "autoTrade": true,
+  "dailyLossLimitUsd": 2,
+  "dryRun": true,
+  "llmTemperature": 0.2,
+  "maxConsecutiveLosses": 3,
+  "maxDeployAmountSol": 0.03,
+  "maxMcapSOL": 66000,
+  "maxOpenPositions": 3,
+  "maxTop10Pct": 50,
+  "maxWashTradePct": 25,
+  "minConfidence": 0.85,
+  "minLiquiditySOL": 100,
+  "minMcapSOL": 1000,
+  "minOrganicScore": 70,
+  "minVolumeSOL": 33,
+  "scannerIntervalSec": 300,
+  "stopLossPct": -10,
+  "takeProfitPct": 20,
+  "trailingTakeProfit": true
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "timestamp": "2026-05-30T03:42:36Z",
+    "token": "kSrKKcfp9dJHWsxdYZuWtpXqXANmptdkTakB4YEpump",
+    "metrics": {
+      "buy_sell_ratio": 1.516619718309859,
+      "liquidity_usd": 48923.34,
+      "market_cap": 392158,
+      "organic_score": 0.8,
+      "token": "kSrKKcfp9dJHWsxdYZuWtpXqXANmptdkTakB4YEpump",
+      "volume_5m": 18708.95,
+      "wash_trade_probability": 0.1
+    },
+    "decision": "BUY",
+    "reasoning": "Confidence: 0.75"
+  },
+  {
+    "timestamp": "2026-05-30T03:42:36Z",
+    "token": "ByGXpYA6nTB99LCr6t96a4ALTgvFGYjvce5ryMjWpump",
+    "metrics": {
+      "buy_sell_ratio": 1.3620795107033639,
+      "liquidity_usd": 15921.24,
+      "market_cap": 41740,
+      "organic_score": 0.8,
+      "token": "ByGXpYA6nTB99LCr6t96a4ALTgvFGYjvce5ryMjWpump",
+      "volume_5m": 19907.08,
+      "wash_trade_probability": 0.1
+    },
+    "decision": "MICRO_ENTRY_ONLY",
+    "reasoning": "Confidence: 0.65"
+  },
+  {
+    "timestamp": "2026-05-30T03:55:56Z",
+    "token": "ByGXpYA6nTB99LCr6t96a4ALTgvFGYjvce5ryMjWpump",
+    "metrics": {
+      "buy_sell_ratio": 1.3609106052193225,
+      "liquidity_usd": 13457.85,
+      "market_cap": 29765,
+      "organic_score": 0.8,
+      "token": "ByGXpYA6nTB99LCr6t96a4ALTgvFGYjvce5ryMjWpump",
+      "volume_5m": 6448.44,
+      "wash_trade_probability": 0.1
+    },
+    "decision": "MICRO_ENTRY_ONLY",
+    "reasoning": "Confidence: 0.55"
+  },
+  {
+    "timestamp": "2026-05-30T03:55:56Z",
+    "token": "9AyKTgKpNfVQCebAPdMs5fPJA7QtyJMF7PkWjtbUpump",
+    "metrics": {
+      "token": "9AyKTgKpNfVQCebAPdMs5fPJA7QtyJMF7PkWjtbUpump",
+      "liquidity_usd": 19669,
+      "market_cap": 65465,
+      "volume_5m": 1716.82,
+      "buy_sell_ratio": 1.190917516218721,
+      "organic_score": 0.8,
+      "wash_trade_probability": 0.1
+    },
+    "decision": "MICRO_ENTRY_ONLY",
+    "reasoning": "Confidence: 0.70"
+  }
+]

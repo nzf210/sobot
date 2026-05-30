@@ -25,7 +25,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./wallet.enc:/app/wallet.enc
+      - ./executor-ts/wallet.enc:/app/wallet.enc
     environment:
       - WALLET_PATH=wallet.enc
     restart: unless-stopped

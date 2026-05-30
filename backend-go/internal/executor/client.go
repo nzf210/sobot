@@ -61,3 +61,37 @@ func ExecuteSwap(inputMint, outputMint string, amount int64) (*SwapResponse, err
 
 	return &res, nil
 }
+
+type WalletResponse struct {
+	Success    bool    `json:"success"`
+	Address    string  `json:"address"`
+	BalanceSol float64 `json:"balanceSol"`
+	Error      string  `json:"error,omitempty"`
+}
+
+func GetWalletBalance() (*WalletResponse, error) {
+	host := os.Getenv("EXECUTOR_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port := os.Getenv("EXECUTOR_PORT")
+	if port == "" {
+		port = "3000"
+	}
+
+	url := fmt.Sprintf("http://%s:%s/wallet", host, port)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var res WalletResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+
+	return &res, nil
+}

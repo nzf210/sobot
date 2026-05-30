@@ -7,6 +7,7 @@ Thumbs.db
 .idea/
 .vscode/
 .antigravitycli/
+.commandcode/
 
 # ------------------------------------------------------------------------------
 # SECRETS & CREDENTIALS (CRITICAL)
@@ -42,7 +43,7 @@ credentials.json
 *.db
 *.sqlite
 *.sqlite3
-data/
+data/hybrid-system.md
 db/
 
 # ------------------------------------------------------------------------------

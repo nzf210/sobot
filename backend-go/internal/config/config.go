@@ -2,79 +2,100 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-    MinLiquidityUSD float64
-    MaxPositions int
-    SniperSizeSOL float64
-    LLMEnabled bool
-    LLMURL string
-    LLMAPIKey string
-    LLMModel string
-    TelegramBotToken string
-    TelegramWhitelistUserIDs []string
-    BackendPort string
-    ExecutorHost string
-    ExecutorPort string
+	MinLiquidityUSD          float64
+	MaxPositions             int
+	SniperSizeSOL            float64
+	LLMEnabled               bool
+	LLMURL                   string
+	LLMAPIKey                string
+	LLMModel                 string
+	TelegramBotToken         string
+	TelegramWhitelistUserIDs []string
+	BackendPort              string
+	ExecutorHost             string
+	ExecutorPort             string
+	RPCURL                   string
+	WSSURL                   string
+	LogLevel                 string
 }
 
 func Load() Config {
-    // Attempt to load .env from root directory.
-    // It's okay if it fails (e.g. running in production where env is injected).
-    _ = godotenv.Load("../.env")
+	_ = godotenv.Load()
 
-    llmURL := os.Getenv("LLM_URL")
-    if llmURL == "" {
-        llmURL = "https://api.openai.com/v1" // Default fallback
-    }
+	llmURL := getEnv("LLM_URL", "https://api.openai.com/v1")
+	llmModel := getEnv("LLM_MODEL", "gpt-4o-mini")
 
-    tgWhitelist := os.Getenv("TELEGRAM_WHITELIST_USER_IDS")
-    if tgWhitelist == "" {
-        // Fallback to TELEGRAM_CHAT_ID for backward compatibility
-        tgWhitelist = os.Getenv("TELEGRAM_CHAT_ID")
-    }
+	tgWhitelist := getEnv("TELEGRAM_WHITELIST_USER_IDS", "")
+	if tgWhitelist == "" {
+		tgWhitelist = os.Getenv("TELEGRAM_CHAT_ID")
+	}
 
-    var whitelistIDs []string
-    if tgWhitelist != "" {
-        for _, id := range strings.Split(tgWhitelist, ",") {
-            trimmed := strings.TrimSpace(id)
-            if trimmed != "" {
-                whitelistIDs = append(whitelistIDs, trimmed)
-            }
-        }
-    }
+	var whitelistIDs []string
+	if tgWhitelist != "" {
+		for _, id := range strings.Split(tgWhitelist, ",") {
+			trimmed := strings.TrimSpace(id)
+			if trimmed != "" {
+				whitelistIDs = append(whitelistIDs, trimmed)
+			}
+		}
+	}
 
-    backendPort := os.Getenv("BACKEND_PORT")
-    if backendPort == "" {
-        backendPort = "8080"
-    }
+	return Config{
+		MinLiquidityUSD:          getEnvFloat("MIN_LIQUIDITY_USD", 10000),
+		MaxPositions:             getEnvInt("MAX_POSITIONS", 5),
+		SniperSizeSOL:            getEnvFloat("SNIPER_SIZE_SOL", 0.1),
+		LLMEnabled:               getEnvBool("LLM_ENABLED", true),
+		LLMURL:                   llmURL,
+		LLMAPIKey:                os.Getenv("LLM_API_KEY"),
+		LLMModel:                 llmModel,
+		TelegramBotToken:         os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramWhitelistUserIDs: whitelistIDs,
+		BackendPort:              getEnv("BACKEND_PORT", "8080"),
+		ExecutorHost:             getEnv("EXECUTOR_HOST", "localhost"),
+		ExecutorPort:             getEnv("EXECUTOR_PORT", "3000"),
+		RPCURL:                   getEnv("RPC_URL", "https://api.mainnet-beta.solana.com"),
+		WSSURL:                   getEnv("WSS_URL", "wss://api.mainnet-beta.solana.com"),
+		LogLevel:                 getEnv("LOG_LEVEL", "info"),
+	}
+}
 
-    executorHost := os.Getenv("EXECUTOR_HOST")
-    if executorHost == "" {
-        executorHost = "localhost"
-    }
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
 
-    executorPort := os.Getenv("EXECUTOR_PORT")
-    if executorPort == "" {
-        executorPort = "3000"
-    }
+func getEnvFloat(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return fallback
+}
 
-    return Config{
-        MinLiquidityUSD: 10000,
-        MaxPositions: 5,
-        SniperSizeSOL: 0.1,
-        LLMEnabled: true,
-        LLMURL: llmURL,
-        LLMAPIKey: os.Getenv("LLM_API_KEY"),
-        LLMModel: os.Getenv("LLM_MODEL"),
-        TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
-        TelegramWhitelistUserIDs: whitelistIDs,
-        BackendPort: backendPort,
-        ExecutorHost: executorHost,
-        ExecutorPort: executorPort,
-    }
+func getEnvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return fallback
 }

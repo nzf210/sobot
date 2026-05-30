@@ -1,90 +1,45 @@
 package orchestrator
 
 import (
-    "fmt"
-    "time"
+	"hybrid-solana-bot/internal/config"
+	"hybrid-solana-bot/internal/engines"
+	"hybrid-solana-bot/internal/memory"
+	"hybrid-solana-bot/internal/models"
 
-    "hybrid-solana-bot/internal/config"
-    "hybrid-solana-bot/internal/executor"
-    "hybrid-solana-bot/internal/llm"
-    "hybrid-solana-bot/internal/memory"
-    "hybrid-solana-bot/internal/models"
-    "hybrid-solana-bot/internal/risk"
-    "hybrid-solana-bot/internal/scoring"
+	"go.uber.org/zap"
 )
 
+// Orchestrator is the legacy orchestrator kept for backward compatibility.
+// Use PipelineOrchestrator for the full pipeline.
 type Orchestrator struct {
-    riskEngine *risk.RiskEngine
-    cfg        config.Config
-    mem        *memory.MemoryStore
+	pipeline *PipelineOrchestrator
+	cfg      config.Config
+	mem      *memory.MemoryStore
+	log      *zap.Logger
 }
 
 func New(cfg config.Config, mem *memory.MemoryStore) *Orchestrator {
-    return &Orchestrator{
-        riskEngine: risk.New(mem),
-        cfg:        cfg,
-        mem:        mem,
-    }
+	// Note: logger is nil here, it will be set by the server
+	return &Orchestrator{
+		cfg: cfg,
+		mem: mem,
+	}
 }
 
-func (o *Orchestrator) Process(metrics models.TokenMetrics) interface{} {
+func (o *Orchestrator) SetLogger(log *zap.Logger) {
+	o.log = log
+	o.pipeline = NewPipeline(o.cfg, o.mem, log)
+}
 
-    if !o.riskEngine.Validate(metrics) {
-        return map[string]interface{}{
-            "status": "rejected",
-        }
-    }
+// Process runs the full pipeline and returns the signal result.
+func (o *Orchestrator) Process(metrics models.TokenMetrics) *engines.PipelineSignal {
+	if o.pipeline == nil {
+		o.SetLogger(o.log)
+	}
+	return o.pipeline.Process(metrics)
+}
 
-    score := scoring.Compute(metrics)
-
-    if score < 0.5 {
-        return map[string]interface{}{
-            "status": "low_score",
-        }
-    }
-
-    // Load context from memory files
-    ctxStr := o.mem.LoadContext()
-
-    llmResult, err := llm.Analyze(o.cfg, metrics, ctxStr)
-    if err != nil {
-        return map[string]interface{}{
-            "status": "error",
-            "error": err.Error(),
-        }
-    }
-
-    // Log the decision
-    o.mem.LogDecision(metrics.Token, metrics, llmResult.Decision, fmt.Sprintf("Confidence: %.2f", llmResult.Confidence))
-
-    if llmResult.Decision != "SELL" && llmResult.Decision != "HOLD" {
-        // Trigger Executor
-        go func() {
-            userCfg := o.mem.GetUserConfig()
-            solAmount := userCfg.MaxDeployAmountSol
-            lamports := int64(solAmount * 1e9)
-            
-            resp, err := executor.ExecuteSwap("So11111111111111111111111111111111111111112", metrics.Token, lamports)
-            if err == nil && resp != nil && resp.Success {
-                // Record the new position to memory
-                positions := o.mem.GetPositions()
-                newPos := models.Position{
-                    TokenAddress: metrics.Token,
-                    EntryPrice:   metrics.PriceSOL,
-                    EntryAmount:  solAmount,
-                    AmountToken:  0, // Would need actual token amount received in a prod scenario
-                    EntryTime:    time.Now().UTC(),
-                    IsClosed:     false,
-                }
-                positions = append(positions, newPos)
-                o.mem.SavePositions(positions)
-            }
-        }()
-    }
-
-    return map[string]interface{}{
-        "status": "approved",
-        "score": score,
-        "llm": llmResult,
-    }
+// GetPipeline returns the underlying pipeline for direct access.
+func (o *Orchestrator) GetPipeline() *PipelineOrchestrator {
+	return o.pipeline
 }

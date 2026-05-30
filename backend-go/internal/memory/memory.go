@@ -19,21 +19,26 @@ type DecisionRecord struct {
 }
 
 type UserConfig struct {
-	AutoTrade          bool    `json:"autoTrade"`
-	ScannerIntervalSec int     `json:"scannerIntervalSec"`
-	MinLiquiditySOL    float64 `json:"minLiquiditySOL"`
-	MaxLiquiditySOL    float64 `json:"maxLiquiditySOL"`
-	MinVolumeSOL       float64 `json:"minVolumeSOL"`
-	MinOrganicScore    float64 `json:"minOrganicScore"`
-	MaxWashTradePct    float64 `json:"maxWashTradePct"`
-	MinMcapSOL         float64 `json:"minMcapSOL"`
-	MaxMcapSOL         float64 `json:"maxMcapSOL"`
-	MaxTop10Pct        float64 `json:"maxTop10Pct"`
-	MaxDeployAmountSol float64 `json:"maxDeployAmountSol"`
-	TakeProfitPct      float64 `json:"takeProfitPct"`
-	StopLossPct        float64 `json:"stopLossPct"`
-	TrailingTakeProfit bool    `json:"trailingTakeProfit"`
-	LLMTemperature     float64 `json:"llmTemperature"`
+	AutoTrade             bool    `json:"autoTrade"`
+	DryRun                bool    `json:"dryRun"`
+	ScannerIntervalSec    int     `json:"scannerIntervalSec"`
+	MinConfidence         float64 `json:"minConfidence"`
+	MinLiquiditySOL       float64 `json:"minLiquiditySOL"`
+	MaxLiquiditySOL       float64 `json:"maxLiquiditySOL"`
+	MinVolumeSOL          float64 `json:"minVolumeSOL"`
+	MinOrganicScore       float64 `json:"minOrganicScore"`
+	MaxWashTradePct       float64 `json:"maxWashTradePct"`
+	MinMcapSOL            float64 `json:"minMcapSOL"`
+	MaxMcapSOL            float64 `json:"maxMcapSOL"`
+	MaxTop10Pct           float64 `json:"maxTop10Pct"`
+	MaxDeployAmountSol    float64 `json:"maxDeployAmountSol"`
+	TakeProfitPct         float64 `json:"takeProfitPct"`
+	StopLossPct           float64 `json:"stopLossPct"`
+	TrailingTakeProfit    bool    `json:"trailingTakeProfit"`
+	LLMTemperature        float64 `json:"llmTemperature"`
+	MaxOpenPositions      int     `json:"maxOpenPositions"`
+	DailyLossLimitUsd     float64 `json:"dailyLossLimitUsd"`
+	MaxConsecutiveLosses  int     `json:"maxConsecutiveLosses"`
 }
 
 type MemoryStore struct {
@@ -59,20 +64,24 @@ func (s *MemoryStore) initDefaults() {
 		"config.json":         `{"auto_trade": true}`,
 		"user-config.json": `{
   "autoTrade": true,
-  "scannerIntervalSec": 10,
-  "minLiquiditySOL": 66.0,
-  "maxLiquiditySOL": 1000.0,
-  "minVolumeSOL": 33.0,
-  "minOrganicScore": 60.0,
-  "maxWashTradePct": 40.0,
-  "minMcapSOL": 1000.0,
-  "maxMcapSOL": 66000.0,
-  "maxTop10Pct": 60.0,
-  "maxDeployAmountSol": 0.27,
-  "takeProfitPct": 20.0,
-  "stopLossPct": -10.0,
+  "dryRun": true,
+  "llmTemperature": 0.2,
+  "minConfidence": 0.85,
+  "maxDeployAmountSol": 0.03,
+  "minLiquiditySOL": 100,
+  "minVolumeSOL": 33,
+  "minMcapSOL": 1000,
+  "maxMcapSOL": 66000,
+  "maxTop10Pct": 50,
+  "maxWashTradePct": 25,
+  "minOrganicScore": 70,
+  "scannerIntervalSec": 300,
+  "stopLossPct": -10,
+  "takeProfitPct": 20,
   "trailingTakeProfit": true,
-  "llmTemperature": 0.373
+  "maxOpenPositions": 3,
+  "dailyLossLimitUsd": 2,
+  "maxConsecutiveLosses": 3
 }`,
 		"pool-memory.json":    `[]`,
 		"SKILL.md":            "# Bot Skills\n- Sniping\n- Risk Analysis\n- Auto-learning",
