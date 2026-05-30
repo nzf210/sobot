@@ -8,7 +8,9 @@ Thumbs.db
 .vscode/
 .antigravitycli/
 .commandcode/
-
+.fingerprint/*
+debug/*
+btc-treasury/target/*
 # ------------------------------------------------------------------------------
 # SECRETS & CREDENTIALS (CRITICAL)
 # ------------------------------------------------------------------------------

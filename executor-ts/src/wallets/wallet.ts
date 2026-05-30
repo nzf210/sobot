@@ -25,6 +25,13 @@ export function loadWallet(): Keypair {
     throw new Error(`Encrypted wallet file not found at ${fullPath}. Run generate-wallet script first.`);
   }
 
+  if (!fs.statSync(fullPath).isFile()) {
+    throw new Error(
+      `${fullPath} is not a file. ` +
+      `If running in Docker, check that the bind-mount source exists on the host.`
+    );
+  }
+
   const encryptedData = fs.readFileSync(fullPath);
   const decryptedStr = decrypt(encryptedData, password);
 

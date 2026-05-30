@@ -1118,5 +1118,33 @@
   {
     "date": "2026-05-30T15:37:32Z",
     "lesson": "[2026-05-30 15:27] Token 7bUyFftmsS4q... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T15:48:49Z",
+    "lesson": "[2026-05-30 15:45] Token 28xnGP6NjAhu... ditolak karena: Rule Engine: Market cap 3716376.81 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T15:48:49Z",
+    "lesson": "[2026-05-30 15:45] Token D63yVmc4A9fc... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T16:04:37Z",
+    "lesson": "[2026-05-30 15:50] Token JDWie7pRy6h5... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T16:08:49Z",
+    "lesson": "[2026-05-30 16:05] Token BictfwfaSP92... ditolak karena: Rule Engine: Market cap 7624492.75 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T16:08:49Z",
+    "lesson": "[2026-05-30 16:05] Token 6QURRz9o8um8... ditolak karena: Rule Engine: Organic score 60 below minimum 70; Market cap 1909057.97 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T16:08:49Z",
+    "lesson": "[2026-05-30 16:05] Token 8CVJcJsX6FRZ... ditolak karena: Rule Engine: Organic score 50 below minimum 70; Market cap 4194130.43 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T16:08:49Z",
+    "lesson": "[2026-05-30 16:05] Token Boury1bUJQsu... ditolak karena: Zero liquidity"
   }
 ]
