@@ -148,8 +148,16 @@ func (m *Manager) checkPositions() {
 
 			lamports := int64(pos.AmountToken * 1e6)
 			resp, err := executor.ExecuteSwap(pos.TokenAddress, "So11111111111111111111111111111111111111112", lamports)
-			if err != nil || (resp != nil && !resp.Success) {
-				m.log.Error("Failed to close position", zap.Error(err))
+			if err != nil {
+				m.log.Error("Failed to close position (executor call failed)", zap.Error(err), zap.String("token", pos.TokenAddress))
+				continue
+			}
+			if resp == nil || !resp.Success {
+				respErr := "unknown error"
+				if resp != nil && resp.Result.Error != "" {
+					respErr = resp.Result.Error
+				}
+				m.log.Error("Failed to close position (swap returned failure)", zap.String("error", respErr), zap.String("token", pos.TokenAddress))
 				continue
 			}
 

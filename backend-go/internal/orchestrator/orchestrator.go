@@ -19,7 +19,6 @@ type Orchestrator struct {
 }
 
 func New(cfg config.Config, mem *memory.MemoryStore) *Orchestrator {
-	// Note: logger is nil here, it will be set by the server
 	return &Orchestrator{
 		cfg: cfg,
 		mem: mem,
@@ -27,6 +26,9 @@ func New(cfg config.Config, mem *memory.MemoryStore) *Orchestrator {
 }
 
 func (o *Orchestrator) SetLogger(log *zap.Logger) {
+	if log == nil {
+		log = zap.NewNop()
+	}
 	o.log = log
 	o.pipeline = NewPipeline(o.cfg, o.mem, log)
 }

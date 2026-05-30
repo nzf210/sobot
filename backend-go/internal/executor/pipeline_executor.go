@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"go.uber.org/zap"
@@ -55,8 +56,17 @@ func (e *PipelineExecutor) executeSwap(inputMint, outputMint string, amount int6
 		return "", err
 	}
 
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key := os.Getenv("EXECUTOR_API_KEY"); key != "" {
+		req.Header.Set("X-API-Key", key)
+	}
+
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonBytes))
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("executor service unreachable: %v", err)
 	}
@@ -90,8 +100,16 @@ func (e *PipelineExecutor) executeSwap(inputMint, outputMint string, amount int6
 func (e *PipelineExecutor) GetWalletBalance() (*WalletResponse, error) {
 	url := fmt.Sprintf("%s/wallet", e.executorURL)
 
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	if key := os.Getenv("EXECUTOR_API_KEY"); key != "" {
+		req.Header.Set("X-API-Key", key)
+	}
+
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("executor service unreachable: %v", err)
 	}
@@ -122,8 +140,17 @@ func (e *PipelineExecutor) DeployDLMM(sig *engines.PipelineSignal) (string, erro
 		return "", err
 	}
 
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key := os.Getenv("EXECUTOR_API_KEY"); key != "" {
+		req.Header.Set("X-API-Key", key)
+	}
+
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonBytes))
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("DLMM deploy service unreachable: %v", err)
 	}

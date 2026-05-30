@@ -30,6 +30,8 @@ type Scanner struct {
 
 func NewScanner(cfg config.Config, orch *orchestrator.Orchestrator, mem *memory.MemoryStore, log *zap.Logger) *Scanner {
 	tokenChan := make(chan string, 100)
+	tgNotifier := notifier.NewTelegramNotifier(cfg.TelegramBotToken, cfg.TelegramWhitelistUserIDs)
+	stats := NewScanStats()
 
 	s := &Scanner{
 		cfg:         cfg,
@@ -37,11 +39,13 @@ func NewScanner(cfg config.Config, orch *orchestrator.Orchestrator, mem *memory.
 		mem:         mem,
 		log:         log,
 		seen:        newSeenWithTTL(24 * time.Hour),
-		notifier:    notifier.NewTelegramNotifier(cfg.TelegramBotToken, cfg.TelegramWhitelistUserIDs),
+		notifier:    tgNotifier,
 		tokenChan:   tokenChan,
 		pumpWatcher: NewPumpFunWatcher(log, tokenChan),
 		raydWatcher: NewRaydiumWatcher(log, tokenChan),
 		meteWatcher: NewMeteoraWatcher(log, tokenChan),
+		stats:       stats,
+		reporter:    NewReporter(stats, mem, tgNotifier, log, 5),
 	}
 
 	// Start worker pool (4 workers)

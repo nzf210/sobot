@@ -1,7 +1,9 @@
-import express, { Request, Response } from "express"
+import express, { Request, Response, NextFunction } from "express"
 import { executeSwap } from "./executors/jupiter"
 import { loadWallet } from "./wallets/wallet"
 import { Connection } from '@solana/web3.js'
+
+const API_KEY = process.env.EXECUTOR_API_KEY || ""
 
 const app = express()
 
@@ -14,9 +16,25 @@ try {
 
 app.use(express.json())
 
+function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+  if (!API_KEY) {
+    console.warn("EXECUTOR_API_KEY not set — auth disabled (insecure)")
+    next()
+    return
+  }
+  const provided = req.headers["x-api-key"] as string | undefined
+  if (provided !== API_KEY) {
+    res.status(401).json({ success: false, error: "Unauthorized" })
+    return
+  }
+  next()
+}
+
 app.get("/health", (_: Request, res: Response) => {
   res.json({ status: "ok" })
 })
+
+app.use(authMiddleware)
 
 app.get("/wallet", async (_: Request, res: Response) => {
   try {

@@ -57,6 +57,7 @@ logs/
 # ------------------------------------------------------------------------------
 backend-go/hybrid-solana-bot
 backend-go/main
+backend-go/backend
 backend-go/bin/
 backend-go/obj/
 backend-go/out/

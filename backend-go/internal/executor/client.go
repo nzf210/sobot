@@ -47,8 +47,17 @@ func ExecuteSwap(inputMint, outputMint string, amount int64) (*SwapResponse, err
 		return nil, err
 	}
 
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key := os.Getenv("EXECUTOR_API_KEY"); key != "" {
+		req.Header.Set("X-API-Key", key)
+	}
+
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonBytes))
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +90,16 @@ func GetWalletBalance() (*WalletResponse, error) {
 
 	url := fmt.Sprintf("http://%s:%s/wallet", host, port)
 
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if key := os.Getenv("EXECUTOR_API_KEY"); key != "" {
+		req.Header.Set("X-API-Key", key)
+	}
+
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

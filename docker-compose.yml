@@ -13,6 +13,7 @@ services:
     environment:
       - EXECUTOR_PORT=${EXECUTOR_PORT:-3000}
       - EXECUTOR_HOST=executor
+      - EXECUTOR_API_KEY=${EXECUTOR_API_KEY}
     restart: unless-stopped
     networks:
       - solana-net
@@ -28,6 +29,7 @@ services:
       - ./executor-ts/wallet.enc:/app/wallet.enc
     environment:
       - WALLET_PATH=wallet.enc
+      - EXECUTOR_API_KEY=${EXECUTOR_API_KEY}
     restart: unless-stopped
     networks:
       - solana-net
