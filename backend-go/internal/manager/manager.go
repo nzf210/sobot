@@ -14,21 +14,29 @@ import (
 )
 
 type Manager struct {
-	cfg config.Config
-	mem *memory.MemoryStore
-	log *zap.Logger
+	cfg      config.Config
+	mem      *memory.MemoryStore
+	log      *zap.Logger
+	notifier *notifier.TelegramNotifier
+	monitor  *PositionMonitor
+	momentum *MomentumAnalyzer
 }
 
 func New(cfg config.Config, mem *memory.MemoryStore, log *zap.Logger) *Manager {
+	tgNotifier := notifier.NewTelegramNotifier(cfg.TelegramBotToken, cfg.TelegramWhitelistUserIDs)
 	return &Manager{
-		cfg: cfg,
-		mem: mem,
-		log: log,
+		cfg:      cfg,
+		mem:      mem,
+		log:      log,
+		notifier: tgNotifier,
+		monitor:  NewPositionMonitor(cfg, mem, tgNotifier, log, 5),
+		momentum: NewMomentumAnalyzer(mem, log),
 	}
 }
 
 func (m *Manager) Start() {
 	m.log.Info("Starting auto-sell Position Manager")
+	go m.monitor.Start()
 	for {
 		m.checkPositions()
 		time.Sleep(10 * time.Second) // poll every 10 seconds
@@ -69,16 +77,36 @@ func (m *Manager) checkPositions() {
 		pnlPct := ((metric.PriceSOL - pos.EntryPrice) / pos.EntryPrice) * 100.0
 		highestPnlPct := ((pos.HighestPrice - pos.EntryPrice) / pos.EntryPrice) * 100.0
 
+		// Analyze momentum for smart trailing
+		momentumResult := m.momentum.Analyze(pos, metric)
+
 		shouldClose := false
 		var closeReason string
 
-		if cfg.TrailingTakeProfit && highestPnlPct >= cfg.TakeProfitPct {
+		// Smart trailing: auto-activate if high momentum detected
+		useTrailing := cfg.TrailingTakeProfit || momentumResult.ShouldTrail
+		trailPct := 10.0
+		if momentumResult.ShouldTrail {
+			trailPct = momentumResult.TrailPct
+			m.log.Info("Smart trailing activated",
+				zap.String("token", pos.TokenAddress),
+				zap.Float64("trail_pct", trailPct),
+				zap.Int("momentum_level", int(momentumResult.Level)),
+				zap.String("reason", momentumResult.Reason))
+		}
+
+		if useTrailing && highestPnlPct >= cfg.TakeProfitPct {
 			dropFromHighPct := ((pos.HighestPrice - metric.PriceSOL) / pos.HighestPrice) * 100.0
-			if dropFromHighPct >= 10.0 {
+			if dropFromHighPct >= trailPct {
 				shouldClose = true
-				closeReason = fmt.Sprintf("Trailing Stop hit: dropped %.1f%% from peak (Peak PnL was %.2f%%)", dropFromHighPct, highestPnlPct)
+				if momentumResult.ShouldTrail {
+					closeReason = fmt.Sprintf("Smart Trailing Stop: dropped %.1f%% from peak (Peak PnL: %.2f%%, Trail: %.0f%%, Momentum: %s)",
+						dropFromHighPct, highestPnlPct, trailPct, momentumResult.Reason)
+				} else {
+					closeReason = fmt.Sprintf("Trailing Stop hit: dropped %.1f%% from peak (Peak PnL was %.2f%%)", dropFromHighPct, highestPnlPct)
+				}
 			}
-		} else if !cfg.TrailingTakeProfit && pnlPct >= cfg.TakeProfitPct {
+		} else if !useTrailing && pnlPct >= cfg.TakeProfitPct {
 			shouldClose = true
 			closeReason = fmt.Sprintf("Take Profit hit at %.2f%%", pnlPct)
 		} else if pnlPct <= cfg.StopLossPct {
@@ -89,28 +117,36 @@ func (m *Manager) checkPositions() {
 		if shouldClose {
 			m.log.Info("Closing position", zap.String("token", pos.TokenAddress), zap.String("reason", closeReason))
 
-			tg := notifier.NewTelegramNotifier(m.cfg.TelegramBotToken, m.cfg.TelegramWhitelistUserIDs)
-
 			if cfg.DryRun {
 				// DRY RUN: simulate close, mark as closed without real swap
 				positions[i].IsClosed = true
+				positions[i].ExitPrice = metric.PriceSOL
+				positions[i].ExitTime = time.Now()
+				positions[i].ProfitLossUsd = pnlPct
+				positions[i].LowestPrice = metric.PriceSOL
 				modified = true
 
-				lesson := fmt.Sprintf("[DRY RUN] Trade on %s simulated PNL %.2f%%. Reason: %s", pos.TokenAddress, pnlPct, closeReason)
+				quality := "bad"
+				if pnlPct > 10.0 {
+					quality = "excellent"
+				} else if pnlPct > 0 {
+					quality = "good"
+				} else if pnlPct > -5.0 {
+					quality = "neutral"
+				}
+
+				lesson := fmt.Sprintf("[DRY RUN][%s] Token %s: PnL %.2f%% (peak %.2f%%), held %s. Entry: %.8f SOL, Exit: %.8f SOL. Decision quality: %s. Close reason: %s",
+					time.Now().Format("2006-01-02 15:04"), pos.TokenAddress[:8]+"...", pnlPct, highestPnlPct,
+					formatDuration(time.Since(pos.EntryTime)), pos.EntryPrice, metric.PriceSOL, quality, closeReason)
 				m.mem.AddLesson(lesson)
 
-				msg := fmt.Sprintf("🧪 *[DRY RUN] Simulasi SELL*\n*Token:* `%s`\n*PnL Sim:* %.2f%%\n*Reason:* %s\n⚠️ _Tidak ada transaksi nyata._",
-					pos.TokenAddress, pnlPct, closeReason)
-				tg.SendMessage(msg)
+				msg := fmt.Sprintf("🧪 *[DRY RUN] Simulasi SELL*\n*Token:* `%s`\n*PnL Sim:* %.2f%% (peak: %.2f%%)\n*Held:* %s\n*Quality:* %s\n*Reason:* %s\n⚠️ _Tidak ada transaksi nyata._",
+					pos.TokenAddress[:8]+"...", pnlPct, highestPnlPct, formatDuration(time.Since(pos.EntryTime)), quality, closeReason)
+				m.notifier.SendMessage(msg)
 				continue
 			}
 
-			// We sell the whole amount we hold
-			// In production, you'd get the actual token balance from RPC
-			lamports := int64(pos.AmountToken * 1e6) // naive assumption 6 decimals for token, but usually it's dynamic.
-			// The executor expects amount in base units for the inputMint. For tokens, we'd need decimals.
-			// Let's pass the amount we got on entry as a placeholder.
-
+			lamports := int64(pos.AmountToken * 1e6)
 			resp, err := executor.ExecuteSwap(pos.TokenAddress, "So11111111111111111111111111111111111111112", lamports)
 			if err != nil || (resp != nil && !resp.Success) {
 				m.log.Error("Failed to close position", zap.Error(err))
@@ -118,16 +154,29 @@ func (m *Manager) checkPositions() {
 			}
 
 			positions[i].IsClosed = true
+			positions[i].ExitPrice = metric.PriceSOL
+			positions[i].ExitTime = time.Now()
+			positions[i].ProfitLossUsd = pnlPct
+			positions[i].LowestPrice = metric.PriceSOL
 			modified = true
 
-			// Learning
-			lesson := fmt.Sprintf("Trade on %s resulted in %.2f%% PNL. Reason: %s", pos.TokenAddress, pnlPct, closeReason)
+			quality := "bad"
+			if pnlPct > 10.0 {
+				quality = "excellent"
+			} else if pnlPct > 0 {
+				quality = "good"
+			} else if pnlPct > -5.0 {
+				quality = "neutral"
+			}
+
+			lesson := fmt.Sprintf("[%s] Token %s: PnL %.2f%% (peak %.2f%%), held %s. Entry: %.8f SOL, Exit: %.8f SOL. Decision quality: %s. Close reason: %s",
+				time.Now().Format("2006-01-02 15:04"), pos.TokenAddress[:8]+"...", pnlPct, highestPnlPct,
+				formatDuration(time.Since(pos.EntryTime)), pos.EntryPrice, metric.PriceSOL, quality, closeReason)
 			m.mem.AddLesson(lesson)
 
-			// Telegram Notification
-			msg := fmt.Sprintf("🚨 *Auto-Sell Triggered!*\n*Token:* `%s`\n*PnL:* %.2f%%\n*Reason:* %s",
-				pos.TokenAddress, pnlPct, closeReason)
-			tg.SendMessage(msg)
+			msg := fmt.Sprintf("🚨 *Auto-Sell Triggered!*\n*Token:* `%s`\n*PnL:* %.2f%% (peak: %.2f%%)\n*Held:* %s\n*Quality:* %s\n*Reason:* %s",
+				pos.TokenAddress[:8]+"...", pnlPct, highestPnlPct, formatDuration(time.Since(pos.EntryTime)), quality, closeReason)
+			m.notifier.SendMessage(msg)
 		}
 	}
 

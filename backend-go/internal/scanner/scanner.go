@@ -24,6 +24,8 @@ type Scanner struct {
 	pumpWatcher *PumpFunWatcher
 	raydWatcher *RaydiumWatcher
 	meteWatcher *MeteoraWatcher
+	stats       *ScanStats
+	reporter    *Reporter
 }
 
 func NewScanner(cfg config.Config, orch *orchestrator.Orchestrator, mem *memory.MemoryStore, log *zap.Logger) *Scanner {
@@ -56,6 +58,7 @@ func (s *Scanner) Start() {
 	go s.pumpWatcher.Start()
 	go s.raydWatcher.Start()
 	go s.meteWatcher.Start()
+	go s.reporter.Start()
 }
 
 func (s *Scanner) worker() {
@@ -74,12 +77,14 @@ func (s *Scanner) processNewToken(token string) {
 	metricsData, err := metrics.FetchTokenMetrics(token)
 	if err != nil {
 		s.log.Debug("Skipping token, metrics not ready yet", zap.String("token", token))
+		s.stats.AddResult(token, false, "Metrics not ready", 0)
 		return
 	}
 
 	result := s.orch.Process(metricsData)
 
 	if result.Approved {
+		s.stats.AddResult(token, true, "", result.ConfidenceScore)
 		msg := fmt.Sprintf("🚨 *AUTOSCAN: New Token Approved!*\n*Token:* `%s`\n*Confidence:* %.0f%%\n*Size:* %.4f SOL\n*LLM:* %s\n*Liquidity:* $%.2f",
 			token, result.ConfidenceScore*100, result.RecommendedSizeSOL, result.LLMDecision, metricsData.LiquidityUSD)
 		if err := s.notifier.SendMessage(msg); err != nil {
@@ -87,6 +92,7 @@ func (s *Scanner) processNewToken(token string) {
 		}
 		s.log.Info("Autoscan approved token", zap.String("token", token))
 	} else if result.RejectedBy != "" {
+		s.stats.AddResult(token, false, result.RejectedBy, result.ConfidenceScore)
 		s.log.Info("Autoscan rejected token",
 			zap.String("token", token),
 			zap.String("reason", result.RejectedBy))
