@@ -94,48 +94,65 @@ func (p *PipelineOrchestrator) Process(metrics models.TokenMetrics) *engines.Pip
 	}
 
 	// ── Stage 1: Metrics Normalization ──────────────────────────────────────
-	// Already handled in metrics fetcher, but we do additional normalization here
 	sig = p.normalizeMetrics(sig)
 
-	// ── Stage 2: Rule Engine (initial validation) ───────────────────────────
-	isValid, violations := p.ruleEngine.Validate(sig)
+	// ── Stage 2: Metric-only Rule Check (fast rejection) ────────────────────
+	// Only checks data already available from DexScreener fetch:
+	//   liquidity, volume, organic score, wash trade, market cap
+	isValid, violations := p.ruleEngine.ValidateMetrics(sig)
 	if !isValid {
 		sig.RejectedBy = fmt.Sprintf("Rule Engine: %s", formatViolations(violations))
-		p.log.Info("Signal rejected by Rule Engine",
+		p.log.Info("Signal rejected by Metric Rules",
 			zap.String("token", sig.Metrics.Token),
 			zap.String("reason", sig.RejectedBy),
 		)
 		return sig
 	}
 
-	// ── Stage 3: Deployer Reputation ─────────────────────────────────────────
+	// ── Stage 3: Deployer Reputation Engine ─────────────────────────────────
 	p.deployerEngine.Analyze(sig)
 
-	// ── Stage 4: Wallet Cluster Detection ────────────────────────────────────
+	// ── Stage 4: Wallet Cluster Detection ───────────────────────────────────
 	p.walletCluster.Analyze(sig)
 
-	// ── Stage 5: Holder Distribution ─────────────────────────────────────────
+	// ── Stage 5: Holder Distribution Engine ─────────────────────────────────
 	p.holderEngine.Analyze(sig)
 
-	// ── Stage 6: Liquidity Stability ─────────────────────────────────────────
+	// ── Stage 6: Liquidity Stability Engine ─────────────────────────────────
 	p.liquidityEngine.Analyze(sig)
 
-	// ── Stage 7: Jupiter Intelligence ────────────────────────────────────────
+	// ── Stage 7: Jupiter Intelligence ───────────────────────────────────────
 	p.jupiterIntel.Analyze(sig, p.cfg.SniperSizeSOL)
 
-	// ── Stage 8: Momentum Analysis ───────────────────────────────────────────
+	// ── Stage 8: Momentum Engine ────────────────────────────────────────────
 	p.momentumEngine.Analyze(sig)
 
-	// ── Stage 9: Market Regime Detection ─────────────────────────────────────
+	// ── Stage 9: Market Regime Detection ────────────────────────────────────
 	p.regimeDetector.Analyze(sig)
 
-	// ── Stage 10: Confidence Scoring ─────────────────────────────────────────
+	// ── Stage 10: Confidence Engine (combines all engine outputs) ───────────
 	p.confidenceEngine.Compute(sig)
 
-	// ── Stage 11: Dynamic Position Sizing ────────────────────────────────────
+	// ── Stage 11: Engine-dependent Rule Check ───────────────────────────────
+	// Now checks fields populated by Stages 3-10:
+	//   confidence, deployer reputation, holder concentration,
+	//   liquidity stability, wallet cluster, jupiter impact,
+	//   momentum direction, market regime, position size
+	engValid, engViolations := p.ruleEngine.ValidateEngines(sig)
+	if !engValid {
+		sig.RejectedBy = fmt.Sprintf("Engine Rules: %s", formatViolations(engViolations))
+		p.log.Info("Signal rejected by Engine Rules",
+			zap.String("token", sig.Metrics.Token),
+			zap.String("reason", sig.RejectedBy),
+			zap.Float64("confidence", sig.ConfidenceScore),
+		)
+		return sig
+	}
+
+	// ── Stage 12: Dynamic Position Sizing ───────────────────────────────────
 	p.dynamicSizer.Size(sig)
 
-	// ── Stage 12: Portfolio Risk Engine ──────────────────────────────────────
+	// ── Stage 13: Portfolio Risk Engine ─────────────────────────────────────
 	positions := p.mem.GetPositions()
 	openCount := 0
 	totalAtRisk := 0.0
@@ -152,7 +169,6 @@ func (p *PipelineOrchestrator) Process(metrics models.TokenMetrics) *engines.Pip
 		walletBalance = walletResp.BalanceSol
 	}
 
-	// Calculate daily loss and consecutive losses
 	dailyLossUsd := p.calculateDailyLossUsd(positions)
 	consecutiveLosses := p.calculateConsecutiveLosses(positions)
 
@@ -166,7 +182,7 @@ func (p *PipelineOrchestrator) Process(metrics models.TokenMetrics) *engines.Pip
 		return sig
 	}
 
-	// ── Stage 13: LLM Narrative Analysis ─────────────────────────────────────
+	// ── Stage 14: LLM Narrative Analysis ────────────────────────────────────
 	p.llmAnalysis.Analyze(sig)
 
 	// ── Final decision: APPROVE or REJECT ────────────────────────────────────

@@ -9,6 +9,7 @@ import (
 	"hybrid-solana-bot/internal/config"
 	"hybrid-solana-bot/internal/memory"
 	"hybrid-solana-bot/internal/metrics"
+	"hybrid-solana-bot/internal/models"
 	"hybrid-solana-bot/internal/notifier"
 	"hybrid-solana-bot/internal/orchestrator"
 )
@@ -76,12 +77,33 @@ func (s *Scanner) worker() {
 func (s *Scanner) processNewToken(token string) {
 	s.log.Info("Scanner detected new Solana token", zap.String("token", token))
 
-	time.Sleep(3 * time.Second)
+	// Wait for DexScreener to index the new pair (PumpFun tokens can take 10-30s to appear)
+	time.Sleep(10 * time.Second)
 
-	metricsData, err := metrics.FetchTokenMetrics(token)
+	// Retry up to 3 times with backoff for tokens that return zero liquidity
+	var metricsData models.TokenMetrics
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		metricsData, err = metrics.FetchTokenMetrics(token)
+		if err == nil && metricsData.LiquidityUSD > 0 {
+			break
+		}
+		if attempt < 2 {
+			s.log.Debug("Token metrics not ready, retrying",
+				zap.String("token", token),
+				zap.Int("attempt", attempt+1),
+			)
+			time.Sleep(time.Duration(5*(attempt+1)) * time.Second)
+		}
+	}
 	if err != nil {
-		s.log.Debug("Skipping token, metrics not ready yet", zap.String("token", token))
-		s.stats.AddResult(token, false, "Metrics not ready", 0)
+		s.log.Debug("Skipping token, metrics not available", zap.String("token", token), zap.Error(err))
+		s.stats.AddResult(token, false, "Metrics not available", 0)
+		return
+	}
+	if metricsData.LiquidityUSD <= 0 {
+		s.log.Debug("Skipping token, zero liquidity", zap.String("token", token))
+		s.stats.AddResult(token, false, "Zero liquidity", 0)
 		return
 	}
 

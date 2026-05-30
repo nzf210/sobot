@@ -1,1 +1,1122 @@
-[{"date":"2026-05-30","lesson":"Never buy tokens with >90% wash trade"}]
+[
+  {
+    "date": "2026-05-30",
+    "lesson": "Never buy tokens with \u003e90% wash trade"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 2k1P4NECd6UX... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 558250.36 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token HGzPx2JinNn4... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 463903.27 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 9S7Gr9piTk81... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1112138.69 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 6yW15aB4bnPF... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 468820.77 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token GNXzwDfLU9QB... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 1383499.29 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 3J87uiVnxuVh... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 2087624.47 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token BYUPXbzLSccJ... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 5537197.72 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 2LTCSJajLtdn... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 2478805.12 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 4vcZgrj3sT5L... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Market cap 153840.68 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 9QKoDFDHrh41... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 8019132.29 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token GvexzLMZM2nW... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 3664793.74 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 9bWecuhbBE2p... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 2675248.93 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token CiG2xKfR4uxX... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 175917.50 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 4E3rGGxbW83N... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 5644950.21 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token 9MLWbD69kn8q... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 173519.20 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:02] Token DickX14bmK2J... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 164231.86 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token AvxS9N5EEuQr... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 386770.98 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token 5RJMuNej4tJJ... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 434779.52 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token Cshy6euBLpdE... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 119345.66 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token 22TJSgpWPr7a... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 126955.90 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token 9oKmZmcftEUS... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 7462588.90 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token 22yw3vJveRza... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 226416.79 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token HrXJJfi6xo7F... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 146799.43 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token BSFLR95z8mUR... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 31.29 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 183851.35 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token 8vdc81J6xN5X... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 976031.29 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:03] Token AMiRS2e8dwvY... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 194159.32 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:05] Token CgC6xjn6Lius... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 60 below minimum 70; Market cap 4566053.75 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:07:44Z",
+    "lesson": "[2026-05-30 07:05] Token 2XRG8ca1Q8Db... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 674201.56 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:17:44Z",
+    "lesson": "[2026-05-30 07:14] Token AEQQsb2Pqi9r... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 498077.91 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:27:44Z",
+    "lesson": "[2026-05-30 07:25] Token 6YxdLcHUENzn... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 502551.82 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:32:44Z",
+    "lesson": "[2026-05-30 07:27] Token 9mBVF5iyDE1H... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1112805.58 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:32:44Z",
+    "lesson": "[2026-05-30 07:30] Token AGH5T1if4EqH... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 523122.87 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:37:44Z",
+    "lesson": "[2026-05-30 07:33] Token AbFFjFfJPVHz... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 800333.81 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:47:44Z",
+    "lesson": "[2026-05-30 07:42] Token CryTxk7wuQB3... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 531943.18 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:52:44Z",
+    "lesson": "[2026-05-30 07:52] Token 391gMxrP5eUP... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 60 below minimum 70; Market cap 830494.64 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:57:44Z",
+    "lesson": "[2026-05-30 07:56] Token BJe1HdCeCUjt... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 3428693.18 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T07:57:44Z",
+    "lesson": "[2026-05-30 07:56] Token 51AnHYhTdxHv... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1101290.48 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T08:07:44Z",
+    "lesson": "[2026-05-30 08:06] Token GeB8t9ZYfCa2... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Wash trade probability 40% exceeds maximum 25%; Market cap 839500.71 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T08:12:44Z",
+    "lesson": "[2026-05-30 08:08] Token EvEFhvsyEuiv... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 698310.22 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T08:57:45Z",
+    "lesson": "[2026-05-30 08:55] Token 42hwVBvYP8Fn... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Wash trade probability 40% exceeds maximum 25%; Market cap 319028.53 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:02:44Z",
+    "lesson": "[2026-05-30 08:59] Token A537aUnersvn... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 891398.13 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:02:44Z",
+    "lesson": "[2026-05-30 08:59] Token 2CH5cJP8Dxob... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 2432424.68 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:02:44Z",
+    "lesson": "[2026-05-30 09:02] Token 5CpSUASD3uNG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1400696.15 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:12:44Z",
+    "lesson": "[2026-05-30 09:10] Token 616JKeVksLDF... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1229588.24 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:17:44Z",
+    "lesson": "[2026-05-30 09:13] Token CEMVvo9pCVSU... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1345368.01 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:22:44Z",
+    "lesson": "[2026-05-30 09:19] Token 214vFRcuiF8o... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 460770.33 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:22:44Z",
+    "lesson": "[2026-05-30 09:19] Token 2SfzZDGaJTeh... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 68673109.84 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:22:44Z",
+    "lesson": "[2026-05-30 09:22] Token 9EzuQ8wLmz6P... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 397342.37 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:27:44Z",
+    "lesson": "[2026-05-30 09:27] Token 39QdnxwnN74X... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 621602.00 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:32:44Z",
+    "lesson": "[2026-05-30 09:30] Token 5U4p7CF1XkWT... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 766093.44 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:37:44Z",
+    "lesson": "[2026-05-30 09:35] Token 3Qcjm3CXrbwP... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1180401.57 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:42:44Z",
+    "lesson": "[2026-05-30 09:39] Token 4pXLCBkbq98K... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1025661.20 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:42:44Z",
+    "lesson": "[2026-05-30 09:42] Token BTMqtrGBvzMd... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 977622.68 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:42:44Z",
+    "lesson": "[2026-05-30 09:42] Token 99ur1QZBmB7r... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 699407.28 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:42:44Z",
+    "lesson": "[2026-05-30 09:42] Token 4qwKwfyPAbB9... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 60 below minimum 70; Market cap 292303.14 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:47:44Z",
+    "lesson": "[2026-05-30 09:44] Token 5FSgu1LUREq3... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1591553.50 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:47:44Z",
+    "lesson": "[2026-05-30 09:47] Token 8dqQtM7eDQea... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 998062.05 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T09:52:44Z",
+    "lesson": "[2026-05-30 09:50] Token 5r9LutgSzE7F... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 359868.05 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:12:44Z",
+    "lesson": "[2026-05-30 10:09] Token 942wHKjetQ4S... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1050660.69 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:12:44Z",
+    "lesson": "[2026-05-30 10:09] Token 39qJFLiAYWuG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 60 below minimum 70; Market cap 217314.20 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:12:44Z",
+    "lesson": "[2026-05-30 10:09] Token BdeFyYZwLJco... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 3656671.45 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:12:44Z",
+    "lesson": "[2026-05-30 10:11] Token D5erbncxYamG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1361335.24 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:12:44Z",
+    "lesson": "[2026-05-30 10:11] Token QiaCapcT1UeL... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 809261.77 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:17:44Z",
+    "lesson": "[2026-05-30 10:16] Token CJuAc61eawmE... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 718467.19 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:22:44Z",
+    "lesson": "[2026-05-30 10:21] Token BKCLq2Kcvk7s... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 3063908.70 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:32:44Z",
+    "lesson": "[2026-05-30 10:31] Token JDX4h7uGUumM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 281954.35 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:32:44Z",
+    "lesson": "[2026-05-30 10:32] Token 7a2a5E3X3v1U... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 668186.88 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:37:44Z",
+    "lesson": "[2026-05-30 10:36] Token BkCVgVcKS1u5... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 827335.95 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:37:44Z",
+    "lesson": "[2026-05-30 10:36] Token 5UErAnwSnGBP... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 831337.38 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:47:44Z",
+    "lesson": "[2026-05-30 10:43] Token ABjh2NvM6jtC... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 924543.51 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:47:44Z",
+    "lesson": "[2026-05-30 10:45] Token 7XujDi97pueb... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1321161.41 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:47:44Z",
+    "lesson": "[2026-05-30 10:47] Token BUCJwCr6DcTy... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 5878958.63 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:52:45Z",
+    "lesson": "[2026-05-30 10:48] Token 7bXVxCjSrYQr... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 695882.31 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T10:57:44Z",
+    "lesson": "[2026-05-30 10:56] Token 3Be5G1DU1YSc... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 807127.67 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:02:44Z",
+    "lesson": "[2026-05-30 11:01] Token APDCqK5jpSR2... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 480387.30 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:12:44Z",
+    "lesson": "[2026-05-30 11:07] Token 8fuoMSAMxPXC... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 532439.57 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:22:44Z",
+    "lesson": "[2026-05-30 11:21] Token 9iJZKVKWkPck... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 60 below minimum 70; Market cap 937734.49 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:37:44Z",
+    "lesson": "[2026-05-30 11:32] Token A2JiEpP2G2KU... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1699849.93 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:42:44Z",
+    "lesson": "[2026-05-30 11:38] Token 8vJaUvQSb6ue... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 937706.82 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:42:44Z",
+    "lesson": "[2026-05-30 11:39] Token jeg4QG5it6XM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 274242.42 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token jeg4QG5it6XM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Market cap 2396031.75 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 7hTkWxjsN21u... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1979264.07 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token B4zqoatv4hfw... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1015935.79 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token Eah43YmgH5Xw... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 2077994.23 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 8vJaUvQSb6ue... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 60 below minimum 70; Market cap 1050326.84 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 9iJZKVKWkPck... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 60 below minimum 70; Market cap 478932.18 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token A2JiEpP2G2KU... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 3313924.96 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 8fuoMSAMxPXC... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 592999.28 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token APDCqK5jpSR2... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 550222.22 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 3Be5G1DU1YSc... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 417776.33 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 7bXVxCjSrYQr... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 167140.69 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token BUCJwCr6DcTy... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 121933.62 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 7XujDi97pueb... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 472182.54 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token BkCVgVcKS1u5... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1177345.60 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 5UErAnwSnGBP... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 571684.70 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 7a2a5E3X3v1U... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 168022.37 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token BKCLq2Kcvk7s... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 1913492.06 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token JDX4h7uGUumM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 232611.83 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token CJuAc61eawmE... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 566503.61 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token D5erbncxYamG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 9313347.76 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token BdeFyYZwLJco... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 15.15 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 124386.72 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 942wHKjetQ4S... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 189013.71 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token QiaCapcT1UeL... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 291468.98 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 5r9LutgSzE7F... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 167327.56 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 4qwKwfyPAbB9... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 1684704.18 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 8dqQtM7eDQea... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 589974.03 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token BTMqtrGBvzMd... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 170792.21 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:51] Token 99ur1QZBmB7r... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 260099.57 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:53] Token 4nFUTVDNcPvS... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 328380.23 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T11:56:15Z",
+    "lesson": "[2026-05-30 11:53] Token 5LgJNBLbn3WM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1210768.40 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:06:15Z",
+    "lesson": "[2026-05-30 12:05] Token 5tXD4akYf9EG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Wash trade probability 40% exceeds maximum 25%; Market cap 5584776.33 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:11:15Z",
+    "lesson": "[2026-05-30 12:08] Token 8aqh8vn3fkFm... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 8016110.30 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:11:15Z",
+    "lesson": "[2026-05-30 12:10] Token AhRwuhatGASo... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 2302687.00 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:11:15Z",
+    "lesson": "[2026-05-30 12:10] Token CBBXNqTRSf3n... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 846280.32 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 62kXa9XrRErD... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 866687.59 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 8aqh8vn3fkFm... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 50 below minimum 70; Market cap 8949278.50 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token AhRwuhatGASo... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Market cap 3777849.93 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token CBBXNqTRSf3n... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 277761.90 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 4nFUTVDNcPvS... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 191958.87 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 5LgJNBLbn3WM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 645887.45 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token B4zqoatv4hfw... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 995134.92 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 5tXD4akYf9EG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 60 below minimum 70; Market cap 3274314.57 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 7hTkWxjsN21u... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 911875.90 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token Eah43YmgH5Xw... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Wash trade probability 40% exceeds maximum 25%; Market cap 124819.62 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token jeg4QG5it6XM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 229365.08 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 8vJaUvQSb6ue... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1256959.60 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token A2JiEpP2G2KU... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Wash trade probability 40% exceeds maximum 25%; Market cap 853751.80 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 9iJZKVKWkPck... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 366522.37 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 8fuoMSAMxPXC... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 508598.12 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token APDCqK5jpSR2... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 635937.95 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token BUCJwCr6DcTy... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 120490.62 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 7bXVxCjSrYQr... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 167140.69 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 3Be5G1DU1YSc... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Wash trade probability 40% exceeds maximum 25%; Market cap 286024.53 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 7XujDi97pueb... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 283511.54 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 7a2a5E3X3v1U... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 166203.46 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token BkCVgVcKS1u5... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1171106.78 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token JDX4h7uGUumM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 232611.83 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token 5UErAnwSnGBP... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 915150.07 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token BKCLq2Kcvk7s... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 60 below minimum 70; Market cap 973665.22 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token CJuAc61eawmE... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 571780.66 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token D5erbncxYamG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 6758369.41 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:13] Token QiaCapcT1UeL... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 291468.98 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:18:30Z",
+    "lesson": "[2026-05-30 12:16] Token GQULNPqzNbEg... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1248186.87 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:28:30Z",
+    "lesson": "[2026-05-30 12:26] Token 4bM6A2f5icX4... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 943308.08 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:28:30Z",
+    "lesson": "[2026-05-30 12:27] Token 2DXiKsybqRUS... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 283876.54 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:33:30Z",
+    "lesson": "[2026-05-30 12:28] Token H2BaGBRosMfs... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 556468.25 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:33:30Z",
+    "lesson": "[2026-05-30 12:31] Token U1uwQkjtpzto... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 303102.45 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:33:30Z",
+    "lesson": "[2026-05-30 12:32] Token Aqkq3WdTSYrf... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 1702164.50 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:48:30Z",
+    "lesson": "[2026-05-30 12:43] Token FwXR1Fw4vKpv... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 583836.35 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T12:53:30Z",
+    "lesson": "[2026-05-30 12:51] Token FesV5EnmR8uA... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1222541.55 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token B9UFKLAuFV4N... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 685983.98 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 9m9cknf3zsPF... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Market cap 4499854.33 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token FesV5EnmR8uA... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 60 below minimum 70; Market cap 1031245.45 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token FwXR1Fw4vKpv... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 431029.86 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token Aqkq3WdTSYrf... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 426875.46 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token H2BaGBRosMfs... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 302342.32 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token U1uwQkjtpzto... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 4133648.94 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 2DXiKsybqRUS... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 459634.38 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token GQULNPqzNbEg... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1082467.59 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 4bM6A2f5icX4... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1222971.60 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 62kXa9XrRErD... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1065683.18 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token CBBXNqTRSf3n... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 192026.95 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token AhRwuhatGASo... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 7885083.27 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 8aqh8vn3fkFm... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 18346415.64 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 5tXD4akYf9EG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Market cap 133598.84 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 4nFUTVDNcPvS... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 167060.10 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 5LgJNBLbn3WM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 449239.68 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token B4zqoatv4hfw... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 643203.48 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token Eah43YmgH5Xw... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 121506.15 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token jeg4QG5it6XM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 230195.51 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token A2JiEpP2G2KU... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 9.41 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 137943.52 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 8vJaUvQSb6ue... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 294751.63 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 9iJZKVKWkPck... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Market cap 267270.09 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 8fuoMSAMxPXC... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Wash trade probability 70% exceeds maximum 25%; Market cap 352226.65 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token APDCqK5jpSR2... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 667354.82 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:04:12Z",
+    "lesson": "[2026-05-30 12:59] Token 3Be5G1DU1YSc... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 364456.92 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token FgmBBhvPjDX4... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 2390574.34 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 7kT2ShtAFg6Z... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1413348.40 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 4Sk4CCRZGWA6... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 60 below minimum 70; Market cap 492483.24 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 4CfMnSmxBsJQ... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1052223.03 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token FPiWKuBseY47... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1559266.03 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 5nu9aTRpPz2C... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 60 below minimum 70; Wash trade probability 40% exceeds maximum 25%; Market cap 188747.81 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 9m9cknf3zsPF... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 60 below minimum 70; Market cap 6473469.39 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token B9UFKLAuFV4N... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 371940.96 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token FesV5EnmR8uA... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 60 below minimum 70; Market cap 319897.96 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token FwXR1Fw4vKpv... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 370997.81 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token Aqkq3WdTSYrf... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 428935.86 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token U1uwQkjtpzto... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 9652259.48 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token H2BaGBRosMfs... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 273567.78 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 4bM6A2f5icX4... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1452260.93 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token GQULNPqzNbEg... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 60 below minimum 70; Market cap 672771.14 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 2DXiKsybqRUS... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 60 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 280963.56 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token CBBXNqTRSf3n... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 184030.61 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 62kXa9XrRErD... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 872883.38 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token AhRwuhatGASo... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 9852988.34 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 8aqh8vn3fkFm... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 16378425.66 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 4nFUTVDNcPvS... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 168155.98 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 5LgJNBLbn3WM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 329154.52 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 5tXD4akYf9EG... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Market cap 123833.82 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token B4zqoatv4hfw... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 855260.93 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token Eah43YmgH5Xw... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 121355.69 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token 8vJaUvQSb6ue... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 374568.51 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:21] Token jeg4QG5it6XM... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 231705.54 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:26:34Z",
+    "lesson": "[2026-05-30 13:22] Token 4B2GQEwHhiv2... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 871364.95 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:41:34Z",
+    "lesson": "[2026-05-30 13:40] Token A9owSHkR49eX... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 7161694.42 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:46:34Z",
+    "lesson": "[2026-05-30 13:42] Token AQq9GZFvfC3C... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 702737.15 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:46:34Z",
+    "lesson": "[2026-05-30 13:45] Token 6yhRhPgeX3qm... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 565414.90 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:46:34Z",
+    "lesson": "[2026-05-30 13:45] Token Dy2XeTAXaYrd... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1651801.31 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:51:34Z",
+    "lesson": "[2026-05-30 13:50] Token Drf1c1PiDFSj... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 710109.66 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T13:56:34Z",
+    "lesson": "[2026-05-30 13:54] Token LGvzBjoUgvJa... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Market cap 301379.81 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T14:01:34Z",
+    "lesson": "[2026-05-30 13:59] Token CSEuVrpG1MJp... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Market cap 1163012.33 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T14:06:34Z",
+    "lesson": "[2026-05-30 14:01] Token 2rUCWXXXZTaU... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1011034.28 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T14:06:34Z",
+    "lesson": "[2026-05-30 14:04] Token A5oGTBdBM2B3... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 1487291.03 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T14:11:34Z",
+    "lesson": "[2026-05-30 14:08] Token 7TSVaQk4HKM8... ditolak karena: Rule Engine: Confidence 0.00 below threshold 0.85; Liquidity 0.00 SOL below minimum 100.00 SOL; Organic score 55 below minimum 70; Market cap 824703.33 SOL exceeds maximum 66000.00 SOL; Deployer reputation 0.00 too low"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:12] Token A5oGTBdBM2B3... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:12] Token 7tesMq3YJoDr... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:12] Token 7TSVaQk4HKM8... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:12] Token 2rUCWXXXZTaU... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token LGvzBjoUgvJa... ditolak karena: Rule Engine: Organic score 60 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 700217.08 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token CSEuVrpG1MJp... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token Drf1c1PiDFSj... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token Dy2XeTAXaYrd... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token 6yhRhPgeX3qm... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token A9owSHkR49eX... ditolak karena: Rule Engine: Organic score 60 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 225108.54 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token FgmBBhvPjDX4... ditolak karena: Rule Engine: Market cap 667366.14 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token AQq9GZFvfC3C... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:13] Token 4B2GQEwHhiv2... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token 4CfMnSmxBsJQ... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token FPiWKuBseY47... ditolak karena: Rule Engine: Market cap 1669826.34 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token 4Sk4CCRZGWA6... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token 9m9cknf3zsPF... ditolak karena: Rule Engine: Market cap 14730575.54 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token 7kT2ShtAFg6Z... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token FesV5EnmR8uA... ditolak karena: Rule Engine: Wash trade probability 70% exceeds maximum 25%; Market cap 204316.55 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token Aqkq3WdTSYrf... ditolak karena: Rule Engine: Market cap 258561.15 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token B9UFKLAuFV4N... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token U1uwQkjtpzto... ditolak karena: Rule Engine: 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 220287.77 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token FwXR1Fw4vKpv... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token 2DXiKsybqRUS... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token 4bM6A2f5icX4... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:14] Token GQULNPqzNbEg... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:17:30Z",
+    "lesson": "[2026-05-30 14:15] Token 62kXa9XrRErD... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:27:30Z",
+    "lesson": "[2026-05-30 14:27] Token 5r7yTkoxZZwm... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:33] Token 7TSVaQk4HKM8... ditolak karena: Rule Engine: Organic score 55 below minimum 70; Market cap 1425126.35 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token A5oGTBdBM2B3... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token 5r7yTkoxZZwm... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token 7tesMq3YJoDr... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token CSEuVrpG1MJp... ditolak karena: Rule Engine: Market cap 2765776.17 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token 2rUCWXXXZTaU... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token LGvzBjoUgvJa... ditolak karena: Rule Engine: Organic score 55 below minimum 70; Market cap 4621227.44 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token Drf1c1PiDFSj... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token Dy2XeTAXaYrd... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token 6yhRhPgeX3qm... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token AQq9GZFvfC3C... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:34] Token A9owSHkR49eX... ditolak karena: Rule Engine: Organic score 55 below minimum 70; Market cap 124837.55 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token FgmBBhvPjDX4... ditolak karena: Rule Engine: Market cap 639133.57 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token 7kT2ShtAFg6Z... ditolak karena: Rule Engine: Market cap 4314007.22 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token 4B2GQEwHhiv2... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token 4CfMnSmxBsJQ... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token 4Sk4CCRZGWA6... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token FPiWKuBseY47... ditolak karena: Rule Engine: Market cap 1274296.03 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token 9m9cknf3zsPF... ditolak karena: Rule Engine: Market cap 9746787.00 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token FesV5EnmR8uA... ditolak karena: Rule Engine: Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 191480.14 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token Aqkq3WdTSYrf... ditolak karena: Rule Engine: Organic score 55 below minimum 70; Market cap 262238.27 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token U1uwQkjtpzto... ditolak karena: Rule Engine: 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 220433.21 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token B9UFKLAuFV4N... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:35] Token FwXR1Fw4vKpv... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:36] Token 2DXiKsybqRUS... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:36] Token 4bM6A2f5icX4... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:36] Token GQULNPqzNbEg... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:38:49Z",
+    "lesson": "[2026-05-30 14:37] Token C6rbfocZ5sTM... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T14:58:49Z",
+    "lesson": "[2026-05-30 14:55] Token 7C6XALS2wJiY... ditolak karena: Rule Engine: Organic score 55 below minimum 70; Market cap 3418445.90 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T15:03:49Z",
+    "lesson": "[2026-05-30 15:00] Token 5ETVafhir7uT... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T15:03:49Z",
+    "lesson": "[2026-05-30 15:02] Token 6trFMwA6RBxz... ditolak karena: Rule Engine: Organic score 55 below minimum 70; Market cap 3985487.36 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T15:08:49Z",
+    "lesson": "[2026-05-30 15:08] Token EXDGaeLCRVUv... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T15:18:49Z",
+    "lesson": "[2026-05-30 15:16] Token EPMutzDabUTu... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T15:23:49Z",
+    "lesson": "[2026-05-30 15:19] Token CsWdDJHdMvXL... ditolak karena: Zero liquidity"
+  },
+  {
+    "date": "2026-05-30T15:23:49Z",
+    "lesson": "[2026-05-30 15:20] Token 7bskCaoRFK3k... ditolak karena: Rule Engine: Market cap 2976688.45 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T15:23:49Z",
+    "lesson": "[2026-05-30 15:21] Token BHVBX1XUFGbh... ditolak karena: Rule Engine: Market cap 2293140.79 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-30T15:37:32Z",
+    "lesson": "[2026-05-30 15:27] Token 7bUyFftmsS4q... ditolak karena: Zero liquidity"
+  }
+]

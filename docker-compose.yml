@@ -34,6 +34,23 @@ services:
     networks:
       - solana-net
 
+  btc-treasury:
+    build: ./btc-treasury
+    container_name: solana-hybrid-btc-treasury
+    ports:
+      - "${BTC_TREASURY_PORT:-8090}:${BTC_TREASURY_PORT:-8090}"
+    env_file:
+      - .env
+    volumes:
+      - ./hyperliquid.enc:/app/hyperliquid.enc
+      - ./data/btc-treasury:/app/data/btc-treasury
+    environment:
+      - HYPERLIQUID_KEY_PATH=hyperliquid.enc
+      - DATA_DIR=/app/data/btc-treasury
+    restart: unless-stopped
+    networks:
+      - solana-net
+
 networks:
   solana-net:
     driver: bridge

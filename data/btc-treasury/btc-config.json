@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "llm_activation_threshold": 0.75,
+  "min_confidence": 0.8,
+  "max_exposure": 0.5,
+  "daily_loss_limit_btc": 0.0005,
+  "max_consecutive_losses": 3,
+  "safe_mode_volatility": 9.0,
+  "safe_mode_drawdown": 0.05,
+  "scanner_pairs": [
+    "BTC",
+    "ETH",
+    "SOL",
+    "POL",
+    "BAT",
+    "KAS"
+  ]
+}

@@ -40,18 +40,11 @@ type RuleViolation struct {
 	Message string
 }
 
-// Validate runs all rule checks against the pipeline signal.
+// ValidateMetrics runs metric-only rule checks (no engine output needed).
+// These check DexScreener data that is available immediately after fetch.
 // Returns (isValid, violations)
-func (e *RuleEngine) Validate(sig *PipelineSignal) (bool, []RuleViolation) {
+func (e *RuleEngine) ValidateMetrics(sig *PipelineSignal) (bool, []RuleViolation) {
 	var violations []RuleViolation
-
-	// ── Confidence gate ──────────────────────────────────────────────────────
-	if sig.ConfidenceScore < e.config.MinConfidenceScore {
-		violations = append(violations, RuleViolation{
-			Rule:    "min_confidence",
-			Message: fmt.Sprintf("Confidence %.2f below threshold %.2f", sig.ConfidenceScore, e.config.MinConfidenceScore),
-		})
-	}
 
 	// ── Liquidity gates ──────────────────────────────────────────────────────
 	if sig.Metrics.LiquiditySOL < e.config.MinLiquiditySOL {
@@ -103,17 +96,20 @@ func (e *RuleEngine) Validate(sig *PipelineSignal) (bool, []RuleViolation) {
 		})
 	}
 
-	// ── Holder concentration ─────────────────────────────────────────────────
-	if sig.Top10HolderPct > e.config.MaxTop10HolderPct {
+	return len(violations) == 0, violations
+}
+
+// ValidateEngines runs engine-dependent rule checks.
+// Must be called after all engines have populated the signal fields.
+// Returns (isValid, violations)
+func (e *RuleEngine) ValidateEngines(sig *PipelineSignal) (bool, []RuleViolation) {
+	var violations []RuleViolation
+
+	// ── Confidence gate ──────────────────────────────────────────────────────
+	if sig.ConfidenceScore < e.config.MinConfidenceScore {
 		violations = append(violations, RuleViolation{
-			Rule:    "holder_concentration",
-			Message: fmt.Sprintf("Top 10 holders %.0f%% exceeds maximum %.0f%%", sig.Top10HolderPct, e.config.MaxTop10HolderPct),
-		})
-	}
-	if sig.HolderCount > 0 && sig.HolderCount < e.config.MinHolderCount {
-		violations = append(violations, RuleViolation{
-			Rule:    "min_holders",
-			Message: fmt.Sprintf("Holder count %d below minimum %d", sig.HolderCount, e.config.MinHolderCount),
+			Rule:    "min_confidence",
+			Message: fmt.Sprintf("Confidence %.2f below threshold %.2f", sig.ConfidenceScore, e.config.MinConfidenceScore),
 		})
 	}
 
@@ -128,6 +124,20 @@ func (e *RuleEngine) Validate(sig *PipelineSignal) (bool, []RuleViolation) {
 		violations = append(violations, RuleViolation{
 			Rule:    "deployer_rugs",
 			Message: fmt.Sprintf("Deployer has %d rug history", sig.DeployerRugCount),
+		})
+	}
+
+	// ── Holder concentration ─────────────────────────────────────────────────
+	if sig.Top10HolderPct > e.config.MaxTop10HolderPct {
+		violations = append(violations, RuleViolation{
+			Rule:    "holder_concentration",
+			Message: fmt.Sprintf("Top 10 holders %.0f%% exceeds maximum %.0f%%", sig.Top10HolderPct, e.config.MaxTop10HolderPct),
+		})
+	}
+	if sig.HolderCount > 0 && sig.HolderCount < e.config.MinHolderCount {
+		violations = append(violations, RuleViolation{
+			Rule:    "min_holders",
+			Message: fmt.Sprintf("Holder count %d below minimum %d", sig.HolderCount, e.config.MinHolderCount),
 		})
 	}
 
@@ -186,6 +196,15 @@ func (e *RuleEngine) Validate(sig *PipelineSignal) (bool, []RuleViolation) {
 	}
 
 	return len(violations) == 0, violations
+}
+
+// Validate runs all rule checks (metrics + engines) against the pipeline signal.
+// Deprecated: use ValidateMetrics and ValidateEngines separately in the pipeline.
+func (e *RuleEngine) Validate(sig *PipelineSignal) (bool, []RuleViolation) {
+	valid1, v1 := e.ValidateMetrics(sig)
+	valid2, v2 := e.ValidateEngines(sig)
+	all := append(v1, v2...)
+	return valid1 && valid2, all
 }
 
 // ValidatePortfolio checks portfolio-level constraints.

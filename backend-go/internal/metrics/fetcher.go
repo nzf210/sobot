@@ -16,7 +16,8 @@ type DexScreenerResponse struct {
 		Liquidity struct {
 			Usd float64 `json:"usd"`
 		} `json:"liquidity"`
-		Fdv    float64 `json:"fdv"`
+		Fdv       float64 `json:"fdv"`
+		MarketCap float64 `json:"marketCap"`
 		Volume struct {
 			M5  float64 `json:"m5"`
 			H1  float64 `json:"h1"`
@@ -123,6 +124,18 @@ func FetchTokenMetrics(tokenAddress string) (models.TokenMetrics, error) {
 		washTradeProb = 0.85
 	}
 
+	// Use circulating market cap when available (DexScreener provides both 'marketCap' and 'fdv')
+	// FDV = totalSupply * price, which is massively inflated for tokens with 1B+ supply
+	// marketCap = circulating supply * price, much more realistic
+	mcap := bestPair.MarketCap
+	if mcap <= 0 {
+		mcap = bestPair.Fdv
+	}
+	// Cap at a reasonable value for new meme tokens (max ~$1M USD = ~6600 SOL)
+	if mcap > 1_000_000 && (bestPair.Liquidity.Usd < 20000) {
+		mcap = bestPair.Liquidity.Usd * 10 // rough estimate based on liquidity
+	}
+
 	solPrice := fetchSolPrice()
 
 	tokenPriceUsd := 0.0
@@ -143,8 +156,8 @@ func FetchTokenMetrics(tokenAddress string) (models.TokenMetrics, error) {
 		LiquiditySOL:         bestPair.Liquidity.Usd / solPrice,
 		PriceUSD:             tokenPriceUsd,
 		PriceSOL:             tokenPriceUsd / solPrice,
-		MarketCap:            bestPair.Fdv,
-		MarketCapSOL:         bestPair.Fdv / solPrice,
+		MarketCap:            mcap,
+		MarketCapSOL:         mcap / solPrice,
 		Volume5m:             bestPair.Volume.M5,
 		Volume5mSOL:          bestPair.Volume.M5 / solPrice,
 		Volume1h:             bestPair.Volume.H1,
