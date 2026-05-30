@@ -11421,7 +11421,7 @@
     "market_data": {
       "pair": "POL",
       "market_regime": "",
-      "trend_strength": -1.5819338800545821,
+      "trend_strength": -1.581933880054582,
       "volume_score": 10.0,
       "liquidity_score": 10.0,
       "spread_score": 5.2656728249618645,
@@ -11464,5 +11464,1573 @@
       "timestamp": "2026-05-30T15:45:16.332190733+00:00"
     },
     "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:17.356920862+00:00",
+    "market_data": {
+      "pair": "BAT",
+      "market_regime": "",
+      "trend_strength": 0.0,
+      "volume_score": -0.0,
+      "liquidity_score": -0.0,
+      "spread_score": 10.0,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 3.6,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:17.356920862+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:18.277768541+00:00",
+    "market_data": {
+      "pair": "KAS",
+      "market_regime": "",
+      "trend_strength": -3.2004288866131017,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 1.4904758787714485,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Spread critically wide"
+      ],
+      "market_regime": "DISTRIBUTION",
+      "opportunity_score": 5.93,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:18.277768541+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:19.302708573+00:00",
+    "market_data": {
+      "pair": "BTC",
+      "market_regime": "",
+      "trend_strength": 6.936651949946333,
+      "volume_score": 1.7877850999999996,
+      "liquidity_score": 0.5476608,
+      "spread_score": 9.8645628766845,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 4.66,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:19.302708573+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:20.223552044+00:00",
+    "market_data": {
+      "pair": "ETH",
+      "market_regime": "",
+      "trend_strength": 1.1627750881608558,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.506075274128673,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.17,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:20.223552044+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:21.145377657+00:00",
+    "market_data": {
+      "pair": "SOL",
+      "market_regime": "",
+      "trend_strength": 7.200151093924216,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.878780532152884,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "ACCUMULATE",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.81,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:21.145377657+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:22.169970999+00:00",
+    "market_data": {
+      "pair": "POL",
+      "market_regime": "",
+      "trend_strength": -1.4135144587405892,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 5.2656728249618645,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.5,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 6.49,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:22.169970999+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:23.603186618+00:00",
+    "market_data": {
+      "pair": "BAT",
+      "market_regime": "",
+      "trend_strength": 0.0,
+      "volume_score": -0.0,
+      "liquidity_score": -0.0,
+      "spread_score": 10.0,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 3.6,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:23.603186618+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:24.431049912+00:00",
+    "market_data": {
+      "pair": "KAS",
+      "market_regime": "",
+      "trend_strength": -3.6517366753749,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 5.090498478054161,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.5,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "DISTRIBUTION",
+      "opportunity_score": 6.24,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:24.431049912+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:25.548839657+00:00",
+    "market_data": {
+      "pair": "BTC",
+      "market_regime": "",
+      "trend_strength": 3.169638042205615,
+      "volume_score": 1.4389744000000002,
+      "liquidity_score": 0.9828716000000002,
+      "spread_score": 9.864619716784448,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 4.32,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:25.548839657+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:26.434108636+00:00",
+    "market_data": {
+      "pair": "ETH",
+      "market_regime": "",
+      "trend_strength": 0.8339898326392856,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.506148451774722,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.13,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:26.434108636+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:27.392016273+00:00",
+    "market_data": {
+      "pair": "SOL",
+      "market_regime": "",
+      "trend_strength": 4.114800341606065,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.878833408052152,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "ACCUMULATE",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.5,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:27.392016273+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:28.620620305+00:00",
+    "market_data": {
+      "pair": "POL",
+      "market_regime": "",
+      "trend_strength": -1.7112247259263544,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 5.2656728249618645,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.5,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 6.46,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:28.620620305+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:29.542749072+00:00",
+    "market_data": {
+      "pair": "BAT",
+      "market_regime": "",
+      "trend_strength": 0.0,
+      "volume_score": -0.0,
+      "liquidity_score": -0.0,
+      "spread_score": 10.0,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 3.6,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:29.542749072+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:30.464651018+00:00",
+    "market_data": {
+      "pair": "KAS",
+      "market_regime": "",
+      "trend_strength": -3.6434334959019736,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 5.090498478054161,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.5,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "DISTRIBUTION",
+      "opportunity_score": 6.24,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:30.464651018+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:31.795252836+00:00",
+    "market_data": {
+      "pair": "BTC",
+      "market_regime": "",
+      "trend_strength": 3.395097573444738,
+      "volume_score": 1.549192,
+      "liquidity_score": 1.0232262,
+      "spread_score": 9.864619716784448,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 4.36,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:31.795252836+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:33.433970682+00:00",
+    "market_data": {
+      "pair": "ETH",
+      "market_regime": "",
+      "trend_strength": 0.2884675060708811,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.506172839506622,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.08,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:33.433970682+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:34.355582494+00:00",
+    "market_data": {
+      "pair": "SOL",
+      "market_regime": "",
+      "trend_strength": 3.3517629960871984,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.878833408052152,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.42,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:34.355582494+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:35.276415285+00:00",
+    "market_data": {
+      "pair": "POL",
+      "market_regime": "",
+      "trend_strength": -1.3026893600358025,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 5.2656728249618645,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.5,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 6.5,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:35.276415285+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:36.198599039+00:00",
+    "market_data": {
+      "pair": "BAT",
+      "market_regime": "",
+      "trend_strength": 0.0,
+      "volume_score": -0.0,
+      "liquidity_score": -0.0,
+      "spread_score": 10.0,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 3.6,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:36.198599039+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:37.119335370+00:00",
+    "market_data": {
+      "pair": "KAS",
+      "market_regime": "",
+      "trend_strength": -3.8095041069167928,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 1.8204423504774512,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Spread critically wide"
+      ],
+      "market_regime": "DISTRIBUTION",
+      "opportunity_score": 5.9,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:37.119335370+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:38.712986154+00:00",
+    "market_data": {
+      "pair": "BTC",
+      "market_regime": "",
+      "trend_strength": 3.9848292903417137,
+      "volume_score": 1.5698935999999997,
+      "liquidity_score": 0.9443178,
+      "spread_score": 9.864619716784448,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 4.41,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:38.712986154+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:39.679622177+00:00",
+    "market_data": {
+      "pair": "ETH",
+      "market_regime": "",
+      "trend_strength": -0.3201538523784589,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.506221607741772,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.02,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:39.679622177+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:40.498518357+00:00",
+    "market_data": {
+      "pair": "SOL",
+      "market_regime": "",
+      "trend_strength": 4.6164232949437025,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.878855426064888,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "ACCUMULATE",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.55,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:40.498518357+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:41.522907366+00:00",
+    "market_data": {
+      "pair": "POL",
+      "market_regime": "",
+      "trend_strength": -1.3528436751813022,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 5.2656728249618645,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.5,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 6.49,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:41.522907366+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:42.440666774+00:00",
+    "market_data": {
+      "pair": "BAT",
+      "market_regime": "",
+      "trend_strength": 0.0,
+      "volume_score": -0.0,
+      "liquidity_score": -0.0,
+      "spread_score": 10.0,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 3.6,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:42.440666774+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:43.570981134+00:00",
+    "market_data": {
+      "pair": "KAS",
+      "market_regime": "",
+      "trend_strength": -3.715360788846592,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 5.419297843798017,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.5,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "DISTRIBUTION",
+      "opportunity_score": 6.27,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:43.570981134+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:49.410136188+00:00",
+    "market_data": {
+      "pair": "BTC",
+      "market_regime": "",
+      "trend_strength": 6.9468674786031155,
+      "volume_score": 1.8907309,
+      "liquidity_score": 0.5772652,
+      "spread_score": 9.864641706597364,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 4.68,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:49.410136188+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:50.325933047+00:00",
+    "market_data": {
+      "pair": "ETH",
+      "market_regime": "",
+      "trend_strength": 0.5477682323831509,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.506319115324304,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.11,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:50.325933047+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:51.251101257+00:00",
+    "market_data": {
+      "pair": "SOL",
+      "market_regime": "",
+      "trend_strength": 0.5572476234282508,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 9.87890383753853,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.7,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.7,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 7.14,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:51.251101257+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:52.172125377+00:00",
+    "market_data": {
+      "pair": "POL",
+      "market_regime": "",
+      "trend_strength": -0.6523948941885328,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 5.816175984849025,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "PROTECT_TREASURY",
+      "confidence": 0.5,
+      "risk_level": "LOW",
+      "treasury_mode": "PROTECT",
+      "reason": "Low risk but unactionable opportunity. Preserve treasury.",
+      "warnings": [
+        "No significant risk factors"
+      ],
+      "market_regime": "RANGING",
+      "opportunity_score": 6.62,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:52.172125377+00:00"
+    },
+    "action_taken": "PROTECT_TREASURY"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:53.711878013+00:00",
+    "market_data": {
+      "pair": "BAT",
+      "market_regime": "",
+      "trend_strength": 0.0,
+      "volume_score": -0.0,
+      "liquidity_score": -0.0,
+      "spread_score": 10.0,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Liquidity critically low"
+      ],
+      "market_regime": "LOW_LIQUIDITY_DANGER",
+      "opportunity_score": 3.6,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:53.711878013+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
+  },
+  {
+    "timestamp": "2026-05-30T15:45:54.711201915+00:00",
+    "market_data": {
+      "pair": "KAS",
+      "market_regime": "",
+      "trend_strength": -3.9940613255053763,
+      "volume_score": 10.0,
+      "liquidity_score": 10.0,
+      "spread_score": 1.823117681690091,
+      "volatility_score": 5.0,
+      "breakout_probability": 0.3,
+      "reversal_probability": 0.2,
+      "confidence": 0.5,
+      "active_strategy": "hyperliquid_market_maker",
+      "portfolio_exposure": 0.0,
+      "daily_drawdown": 0.0
+    },
+    "treasury_before": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "treasury_after": {
+      "current_btc": 0.0,
+      "previous_btc": 0.0,
+      "btc_growth_7d": 0.0,
+      "btc_growth_30d": 0.0,
+      "stable_value": 0.0,
+      "last_update": ""
+    },
+    "advisory": {
+      "recommendation": "REDUCE_EXPOSURE",
+      "confidence": 0.5,
+      "risk_level": "MEDIUM",
+      "treasury_mode": "SAFE_MODE",
+      "reason": "Medium risk with low opportunity. Reduce exposure.",
+      "warnings": [
+        "Spread critically wide"
+      ],
+      "market_regime": "DISTRIBUTION",
+      "opportunity_score": 5.88,
+      "bypass_quant": false,
+      "timestamp": "2026-05-30T15:45:54.711201915+00:00"
+    },
+    "action_taken": "REDUCE_EXPOSURE"
   }
 ]
