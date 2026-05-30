@@ -15,5 +15,5 @@ func main() {
 
     log.Info("starting backend")
 
-    server.Run(":8080")
+    server.Run(":" + cfg.BackendPort)
 }

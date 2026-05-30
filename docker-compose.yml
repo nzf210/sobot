@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend-go
+    container_name: solana-hybrid-backend
+    ports:
+      - "${BACKEND_PORT:-8080}:${BACKEND_PORT:-8080}"
+    env_file:
+      - .env
+    volumes:
+      - ./data/memory:/app/data/memory
+    environment:
+      - EXECUTOR_PORT=${EXECUTOR_PORT:-3000}
+      - EXECUTOR_HOST=executor
+    restart: unless-stopped
+    networks:
+      - solana-net
+
+  executor:
+    build: ./executor-ts
+    container_name: solana-hybrid-executor
+    ports:
+      - "${EXECUTOR_PORT:-3000}:${EXECUTOR_PORT:-3000}"
+    env_file:
+      - .env
+    volumes:
+      - ./wallet.enc:/app/wallet.enc
+    environment:
+      - WALLET_PATH=wallet.enc
+    restart: unless-stopped
+    networks:
+      - solana-net
+
+networks:
+  solana-net:
+    driver: bridge

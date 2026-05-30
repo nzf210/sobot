@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -15,9 +17,16 @@ type Config struct {
     LLMModel string
     TelegramBotToken string
     TelegramWhitelistUserIDs []string
+    BackendPort string
+    ExecutorHost string
+    ExecutorPort string
 }
 
 func Load() Config {
+    // Attempt to load .env from root directory.
+    // It's okay if it fails (e.g. running in production where env is injected).
+    _ = godotenv.Load("../.env")
+
     llmURL := os.Getenv("LLM_URL")
     if llmURL == "" {
         llmURL = "https://api.openai.com/v1" // Default fallback
@@ -39,6 +48,21 @@ func Load() Config {
         }
     }
 
+    backendPort := os.Getenv("BACKEND_PORT")
+    if backendPort == "" {
+        backendPort = "8080"
+    }
+
+    executorHost := os.Getenv("EXECUTOR_HOST")
+    if executorHost == "" {
+        executorHost = "localhost"
+    }
+
+    executorPort := os.Getenv("EXECUTOR_PORT")
+    if executorPort == "" {
+        executorPort = "3000"
+    }
+
     return Config{
         MinLiquidityUSD: 10000,
         MaxPositions: 5,
@@ -49,5 +73,8 @@ func Load() Config {
         LLMModel: os.Getenv("LLM_MODEL"),
         TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
         TelegramWhitelistUserIDs: whitelistIDs,
+        BackendPort: backendPort,
+        ExecutorHost: executorHost,
+        ExecutorPort: executorPort,
     }
 }

@@ -1,4 +1,4 @@
-import express from "express"
+import express, { Request, Response } from "express"
 import { executeSwap } from "./executors/jupiter"
 import { loadWallet } from "./wallets/wallet"
 
@@ -13,24 +13,28 @@ try {
 
 app.use(express.json())
 
-app.get("/health", (_, res) => {
+app.get("/health", (_: Request, res: Response) => {
   res.json({ status: "ok" })
 })
 
-app.post("/execute", async (req, res) => {
+app.post("/execute", async (req: Request, res: Response): Promise<any> => {
+  const { inputMint, outputMint, amount } = req.body;
 
-  const body = req.body
+  if (!inputMint || !outputMint || !amount) {
+    return res.status(400).json({ success: false, error: "Missing required fields: inputMint, outputMint, amount" });
+  }
 
-  console.log("received action", body)
+  console.log("received swap action", req.body)
 
-  const result = await executeSwap()
+  const result = await executeSwap(inputMint, outputMint, amount)
 
   res.json({
-    success: true,
+    success: result.status === "success",
     result
   })
 })
 
-app.listen(3000, () => {
-  console.log("executor running on :3000")
+const PORT = process.env.EXECUTOR_PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`executor running on :${PORT}`)
 })

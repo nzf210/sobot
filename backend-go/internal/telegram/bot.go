@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,7 +10,8 @@ import (
 	"go.uber.org/zap"
 
 	"hybrid-solana-bot/internal/config"
-	"hybrid-solana-bot/internal/models"
+	"hybrid-solana-bot/internal/memory"
+	"hybrid-solana-bot/internal/metrics"
 	"hybrid-solana-bot/internal/orchestrator"
 )
 
@@ -17,10 +19,11 @@ type Bot struct {
 	api  *tgbotapi.BotAPI
 	cfg  config.Config
 	orch *orchestrator.Orchestrator
+	mem  *memory.MemoryStore
 	log  *zap.Logger
 }
 
-func NewBot(cfg config.Config, orch *orchestrator.Orchestrator, log *zap.Logger) (*Bot, error) {
+func NewBot(cfg config.Config, orch *orchestrator.Orchestrator, mem *memory.MemoryStore, log *zap.Logger) (*Bot, error) {
 	if cfg.TelegramBotToken == "" {
 		return nil, fmt.Errorf("telegram bot token is empty")
 	}
@@ -34,6 +37,7 @@ func NewBot(cfg config.Config, orch *orchestrator.Orchestrator, log *zap.Logger)
 		api:  botAPI,
 		cfg:  cfg,
 		orch: orch,
+		mem:  mem,
 		log:  log,
 	}, nil
 }
@@ -81,8 +85,41 @@ func (b *Bot) Start() {
 			b.handleAnalyze(update.Message.Chat.ID, args)
 		case "health":
 			b.handleHealth(update.Message.Chat.ID)
+		case "config":
+			userCfg := b.mem.GetUserConfig()
+			cfgJSON, _ := json.MarshalIndent(userCfg, "", "  ")
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "⚙️ *Current Bot Config:*\n```json\n"+string(cfgJSON)+"\n```")
+			msg.ParseMode = "Markdown"
+			b.api.Send(msg)
+		case "setconfig":
+			args := strings.Split(update.Message.CommandArguments(), " ")
+			if len(args) < 2 {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Usage: `/setconfig <key> <value>`")
+				msg.ParseMode = "Markdown"
+				b.api.Send(msg)
+				continue
+			}
+			key := args[0]
+			valStr := args[1]
+
+			// Basic type parsing (bool and float)
+			var val interface{} = valStr
+			if valStr == "true" {
+				val = true
+			} else if valStr == "false" {
+				val = false
+			} else if f, err := strconv.ParseFloat(valStr, 64); err == nil {
+				val = f
+			}
+
+			err := b.mem.UpdateUserConfig(key, val)
+			if err != nil {
+				b.api.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "❌ Failed to update config: "+err.Error()))
+			} else {
+				b.api.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "✅ Config updated successfully!"))
+			}
 		default:
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Unknown command. Type /help for available commands.")
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Unknown command. Use /analyze <token>, /config, or /setconfig.")
 			b.api.Send(msg)
 		}
 	}
@@ -91,12 +128,30 @@ func (b *Bot) Start() {
 func (b *Bot) handleHelp(chatID int64) {
 	helpText := `🤖 *Hybrid Solana Bot*
 
-*Available Commands:*
-/help - Show this help message
-/health - Check system health status
-/analyze <token_address> - Analyze a Solana token by its address
+*Daftar Perintah (Commands):*
+/help - Menampilkan pesan panduan ini
+/health - Cek status kesehatan sistem bot
+/analyze <token_address> - Melakukan analisa instan pada sebuah koin (bypass scanner)
+/config - Menampilkan konfigurasi bot (Risk Engine & Trade Settings)
+/setconfig <key> <value> - Mengubah konfigurasi bot. Contoh: 
+   - /setconfig minMcapSOL 500
+   - /setconfig autoTrade false
 
-_Note: Mock values are used for analysis metrics if triggered manually._`
+*Cara Kerja Bot:*
+1. *Scanner:* Memindai koin baru di Solana via DexScreener sesuai interval.
+2. *Risk Engine:* Menyaring token yang tidak sesuai batas di /config.
+3. *AI LLM:* Menganalisa narasi dan metrik (dibantu oleh memori masa lalu / lessons.json).
+4. *Executor:* Jika keputusan AI = BUY, bot otomatis menembak Jup.ag dan membeli sebesar 'maxDeployAmountSol'.
+5. *Position Manager:* Otomatis memantau posisi terbuka dan menjual bila 'takeProfitPct' atau 'stopLossPct' tercapai, lalu mencatat hasilnya agar AI semakin cerdas (Self-Learning).
+
+*Parameter Config Penting:*
+- *autoTrade*: true/false (mengaktifkan auto beli)
+- *scannerIntervalSec*: Interval waktu scanner (detik)
+- *minLiquiditySOL / maxLiquiditySOL*: Batas Likuiditas (dalam SOL)
+- *minMcapSOL / maxMcapSOL*: Batas Market Cap (dalam SOL)
+- *minVolumeSOL*: Volume minimal 5 menit terakhir (dalam SOL)
+- *maxDeployAmountSol*: Modal maksimum tiap kali snipe (dalam SOL)
+- *takeProfitPct / stopLossPct*: Persentase untung/rugi untuk menutup posisi (mis. TP: 20.0, SL: -10.0)`
 
 	msg := tgbotapi.NewMessage(chatID, helpText)
 	msg.ParseMode = "Markdown"
@@ -121,21 +176,18 @@ func (b *Bot) handleAnalyze(chatID int64, args string) {
 	msgWait.ParseMode = "Markdown"
 	b.api.Send(msgWait)
 
-	// Create mock metrics for analysis based on the token
-	metrics := models.TokenMetrics{
-		Token:                token,
-		LiquidityUSD:         25000,
-		MarketCap:            100000,
-		Volume5m:             5000,
-		BuySellRatio:         1.2,
-		OrganicScore:         0.8,
-		WashTradeProbability: 0.1,
+	// Fetch real metrics from DexScreener
+	metricsData, err := metrics.FetchTokenMetrics(token)
+	if err != nil {
+		msgErr := tgbotapi.NewMessage(chatID, fmt.Sprintf("❌ Error fetching metrics: %v", err))
+		b.api.Send(msgErr)
+		return
 	}
 
-	result := b.orch.Process(metrics)
+	result := b.orch.Process(metricsData)
 	
 	msgText := fmt.Sprintf("🚀 *Token Analysis Completed*\n*Token:* `%s`\n*Result:* %+v\n*Liquidity:* $%.2f\n*Volume 5m:* %.2f", 
-		metrics.Token, result, metrics.LiquidityUSD, metrics.Volume5m)
+		metricsData.Token, result, metricsData.LiquidityUSD, metricsData.Volume5m)
 	
 	msg := tgbotapi.NewMessage(chatID, msgText)
 	msg.ParseMode = "Markdown"
