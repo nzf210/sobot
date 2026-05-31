@@ -2,7 +2,9 @@ mod binance;
 mod config;
 mod crypto;
 mod engine;
+mod exchange;
 mod format;
+mod hyperliquid;
 mod llm;
 mod memory;
 mod models;
@@ -17,6 +19,8 @@ use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 
 use crate::binance::BinanceClient;
+use crate::exchange::ExchangeClient;
+use crate::hyperliquid::HyperliquidClient;
 use crate::scanner::ScannerState;
 
 #[actix_web::main]
@@ -30,23 +34,54 @@ async fn main() -> std::io::Result<()> {
     // Shared state
     let shared = server::run(&cfg).await?;
 
-    // Binance spot client
-    let exchange_client = if cfg.exchange_api_key.is_empty() || cfg.exchange_api_secret.is_empty() {
+    // Exchange client (Binance or Hyperliquid based on config)
+    let exchange_client: Option<Arc<dyn ExchangeClient>> = if cfg.exchange_api_key.is_empty() || cfg.exchange_api_secret.is_empty() {
         tracing::warn!("Exchange API key/secret not configured — running advisory-only");
         None
     } else {
-        let base_url = if cfg.exchange_base_url.is_empty() {
-            None
-        } else {
-            Some(cfg.exchange_base_url.clone())
-        };
-        let client = BinanceClient::new(
-            cfg.exchange_api_key.clone(),
-            cfg.exchange_api_secret.clone(),
-            base_url,
-        );
-        tracing::info!("Binance client initialized (API key: {})", client.api_key_display());
-        Some(Arc::new(client))
+        match cfg.exchange_name.as_str() {
+            "hyperliquid" => {
+                // Try loading from encrypted file first, then fall back to env vars
+                let enc_path = std::path::Path::new(&cfg.hyperliquid_key_path);
+                let base_url = if cfg.exchange_base_url.is_empty() {
+                    None
+                } else {
+                    Some(cfg.exchange_base_url.clone())
+                };
+
+                let client = if enc_path.exists() && !cfg.wallet_password.is_empty() {
+                    match HyperliquidClient::load_from_encrypted_file(enc_path, &cfg.wallet_password, base_url.clone()) {
+                        Ok((_key, client)) => {
+                            tracing::info!("Hyperliquid: loaded from encrypted file (address: {})", client.api_key_display());
+                            client
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to load hyperliquid.enc: {} — falling back to env vars", e);
+                            HyperliquidClient::new(cfg.exchange_api_key.clone(), cfg.exchange_api_secret.clone(), base_url)
+                        }
+                    }
+                } else {
+                    HyperliquidClient::new(cfg.exchange_api_key.clone(), cfg.exchange_api_secret.clone(), base_url)
+                };
+
+                tracing::info!("Hyperliquid client initialized (address: {})", client.api_key_display());
+                Some(Arc::new(client) as Arc<dyn ExchangeClient>)
+            }
+            _ => {
+                let base_url = if cfg.exchange_base_url.is_empty() {
+                    None
+                } else {
+                    Some(cfg.exchange_base_url.clone())
+                };
+                let client = BinanceClient::new(
+                    cfg.exchange_api_key.clone(),
+                    cfg.exchange_api_secret.clone(),
+                    base_url,
+                );
+                tracing::info!("Binance client initialized (API key: {})", client.api_key_display());
+                Some(Arc::new(client) as Arc<dyn ExchangeClient>)
+            }
+        }
     };
 
     // Scanner state

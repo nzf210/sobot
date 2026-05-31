@@ -5,8 +5,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
-use crate::binance::BinanceClient;
 use crate::engine::AdvisoryEngine;
+use crate::exchange::{ExchangeClient, ExchangeOrderResult};
 use crate::memory::MemoryStore;
 use crate::models::*;
 
@@ -186,13 +186,13 @@ impl ScannerState {
 
 pub async fn run(
     state: Arc<ScannerState>,
-    exchange: Arc<BinanceClient>,
+    exchange: Arc<dyn ExchangeClient>,
     engine: Arc<AdvisoryEngine>,
     mem: Arc<MemoryStore>,
     interval_secs: u64,
 ) {
     let mut tick = interval(Duration::from_secs(interval_secs));
-    tracing::info!("Multi-pair spot scanner started (every {}s)", interval_secs);
+    tracing::info!("Multi-pair scanner started (every {}s) on {}", interval_secs, exchange.exchange_name());
 
     loop {
         tick.tick().await;
@@ -204,7 +204,7 @@ pub async fn run(
 
         for pair in &pairs {
             if let Some(ps) = state.get_pair_state(pair).await {
-                scan_pair(&state, pair, &ps, &exchange, &engine, &mem).await;
+                scan_pair(&state, pair, &ps, &*exchange, &engine, &mem).await;
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
         }
@@ -215,7 +215,7 @@ async fn scan_pair(
     state: &ScannerState,
     pair: &str,
     ps: &PairState,
-    exchange: &BinanceClient,
+    exchange: &dyn ExchangeClient,
     engine: &AdvisoryEngine,
     mem: &MemoryStore,
 ) {
@@ -234,18 +234,6 @@ async fn scan_pair(
     };
 
     let open_orders = exchange.get_open_orders(pair).await.ok().unwrap_or_default();
-    let advisory_positions: Vec<BtcAdvisoryPosition> = open_orders
-        .into_iter()
-        .map(|o| BtcAdvisoryPosition {
-            id: o.order_id.to_string(),
-            entry_price: o.price.parse().unwrap_or(0.0),
-            current_price: 0.0,
-            size: o.orig_qty.parse().unwrap_or(0.0),
-            pnl_btc: 0.0,
-            entry_time: String::new(),
-            side: o.side,
-        })
-        .collect();
 
     let treasury = mem.get_treasury_state();
 
@@ -265,7 +253,7 @@ async fn scan_pair(
     let input = BtcAdvisoryInput {
         market_data: market_data.clone(),
         treasury: treasury.clone(),
-        open_positions: advisory_positions,
+        open_positions: open_orders,
         loss_streak,
     };
 

@@ -61,7 +61,11 @@ func (s *seenWithTTL) evict() {
 	}
 }
 
-// ── PumpFun Watcher ─────────────────────────────────────────────────────────
+// ── PumpFun / Solana Token Watcher ──────────────────────────────────────────
+// Uses DexScreener token-profiles API to discover newly created Solana tokens.
+// Token profiles include Pump.fun tokens as soon as they're listed on DexScreener.
+// PumpFun tokens have no liquidity until they graduate to Raydium (~20 min).
+// The scanner worker polls each pumpfun token for up to 30 min waiting for graduation.
 
 type PumpFunWatcher struct {
 	log     *zap.Logger
@@ -78,12 +82,12 @@ func NewPumpFunWatcher(log *zap.Logger, out chan<- string) *PumpFunWatcher {
 }
 
 func (w *PumpFunWatcher) Start() {
-	w.log.Info("PumpFun Watcher started")
+	w.log.Info("PumpFun/Solana Watcher started (using token-profiles)")
 	backoff := time.Second
 	for {
 		err := w.fetch()
 		if err != nil {
-			w.log.Debug("PumpFun fetch failed, backing off", zap.Duration("backoff", backoff), zap.Error(err))
+			w.log.Warn("PumpFun fetch failed, backing off", zap.Duration("backoff", backoff), zap.Error(err))
 			time.Sleep(backoff)
 			backoff *= 2
 			if backoff > 2*time.Minute {
@@ -91,7 +95,7 @@ func (w *PumpFunWatcher) Start() {
 			}
 		} else {
 			backoff = time.Second
-			time.Sleep(60 * time.Second)
+			time.Sleep(15 * time.Second)
 		}
 	}
 }
@@ -104,24 +108,29 @@ func (w *PumpFunWatcher) fetch() error {
 	}
 	defer resp.Body.Close()
 
-	var profiles []struct {
+	var data []struct {
 		ChainId      string `json:"chainId"`
 		TokenAddress string `json:"tokenAddress"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&profiles); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return err
 	}
 
-	for _, p := range profiles {
-		if p.ChainId == "solana" && w.seen.add(p.TokenAddress) {
-			w.log.Info("PumpFun new token", zap.String("token", p.TokenAddress))
-			w.outChan <- p.TokenAddress
+	for _, t := range data {
+		if t.ChainId != "solana" {
+			continue
+		}
+		if w.seen.add(t.TokenAddress) {
+			w.log.Info("New Solana token detected", zap.String("token", t.TokenAddress))
+			w.outChan <- t.TokenAddress
 		}
 	}
 	return nil
 }
 
 // ── Raydium Watcher ─────────────────────────────────────────────────────────
+// Uses DexScreener search API. Search returns top 30 results sorted by relevance,
+// so the time window is wider (60 min) to catch newly indexed pairs.
 
 type RaydiumWatcher struct {
 	log     *zap.Logger
@@ -143,7 +152,7 @@ func (w *RaydiumWatcher) Start() {
 	for {
 		err := w.fetch()
 		if err != nil {
-			w.log.Debug("Raydium fetch failed, backing off", zap.Duration("backoff", backoff), zap.Error(err))
+			w.log.Warn("Raydium fetch failed, backing off", zap.Duration("backoff", backoff), zap.Error(err))
 			time.Sleep(backoff)
 			backoff *= 2
 			if backoff > 2*time.Minute {
@@ -151,14 +160,14 @@ func (w *RaydiumWatcher) Start() {
 			}
 		} else {
 			backoff = time.Second
-			time.Sleep(30 * time.Second)
+			time.Sleep(45 * time.Second)
 		}
 	}
 }
 
 func (w *RaydiumWatcher) fetch() error {
 	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get("https://api.dexscreener.com/latest/dex/pairs/solana")
+	resp, err := client.Get("https://api.dexscreener.com/latest/dex/search?q=raydium")
 	if err != nil {
 		return err
 	}
@@ -166,11 +175,12 @@ func (w *RaydiumWatcher) fetch() error {
 
 	var data struct {
 		Pairs []struct {
-			DexId     string `json:"dexId"`
-			BaseToken struct {
+			DexId         string `json:"dexId"`
+			ChainId       string `json:"chainId"`
+			BaseToken     struct {
 				Address string `json:"address"`
 			} `json:"baseToken"`
-			PairCreatedAt int64 `json:"pairCreatedAt"`
+			PairCreatedAt int64  `json:"pairCreatedAt"`
 			Liquidity     struct {
 				Usd float64 `json:"usd"`
 			} `json:"liquidity"`
@@ -181,16 +191,24 @@ func (w *RaydiumWatcher) fetch() error {
 		return err
 	}
 
-	cutoff := time.Now().Add(-30 * time.Minute)
+	cutoff := time.Now().Add(-90 * time.Minute)
 	for _, p := range data.Pairs {
-		if p.DexId != "raydium" || p.Liquidity.Usd < 1000 {
+		if p.ChainId != "solana" || p.DexId != "raydium" {
+			continue
+		}
+		if p.PairCreatedAt == 0 {
+			continue
+		}
+		if p.Liquidity.Usd < 1000 {
 			continue
 		}
 		if time.UnixMilli(p.PairCreatedAt).Before(cutoff) {
 			continue
 		}
 		if w.seen.add(p.BaseToken.Address) {
-			w.log.Info("Raydium new pool", zap.String("token", p.BaseToken.Address))
+			w.log.Info("Raydium new pool",
+				zap.String("token", p.BaseToken.Address),
+				zap.Float64("liquidity_usd", p.Liquidity.Usd))
 			w.outChan <- p.BaseToken.Address
 		}
 	}
@@ -219,7 +237,7 @@ func (w *MeteoraWatcher) Start() {
 	for {
 		err := w.fetch()
 		if err != nil {
-			w.log.Debug("Meteora fetch failed, backing off", zap.Duration("backoff", backoff), zap.Error(err))
+			w.log.Warn("Meteora fetch failed, backing off", zap.Duration("backoff", backoff), zap.Error(err))
 			time.Sleep(backoff)
 			backoff *= 2
 			if backoff > 2*time.Minute {
@@ -258,9 +276,15 @@ func (w *MeteoraWatcher) fetch() error {
 		return err
 	}
 
-	cutoff := time.Now().Add(-60 * time.Minute)
+	cutoff := time.Now().Add(-120 * time.Minute)
 	for _, p := range data.Pairs {
-		if p.ChainId != "solana" || p.Liquidity.Usd < 500 {
+		if p.ChainId != "solana" || p.DexId != "meteora" {
+			continue
+		}
+		if p.PairCreatedAt == 0 {
+			continue
+		}
+		if p.Liquidity.Usd < 500 {
 			continue
 		}
 		if time.UnixMilli(p.PairCreatedAt).Before(cutoff) {

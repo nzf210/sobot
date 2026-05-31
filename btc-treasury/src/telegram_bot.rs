@@ -3,8 +3,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use teloxide::prelude::*;
 
-use crate::binance::BinanceClient;
 use crate::engine::AdvisoryEngine;
+use crate::exchange::{ExchangeClient, ExchangeOrderResult};
 use crate::format::{bot_send_plain, escape_mdv2, send_mdv2_safe};
 use crate::memory::MemoryStore;
 use crate::models::*;
@@ -87,7 +87,7 @@ pub struct BtcBot {
     whitelist: Vec<i64>,
     engine: Arc<AdvisoryEngine>,
     mem: Arc<MemoryStore>,
-    exchange: Option<Arc<BinanceClient>>,
+    exchange: Option<Arc<dyn ExchangeClient>>,
     scanner: Option<Arc<ScannerState>>,
 }
 
@@ -110,7 +110,7 @@ impl BtcBot {
         whitelist: Vec<i64>,
         engine: Arc<AdvisoryEngine>,
         mem: Arc<MemoryStore>,
-        exchange: Option<Arc<BinanceClient>>,
+        exchange: Option<Arc<dyn ExchangeClient>>,
         scanner: Option<Arc<ScannerState>>,
     ) -> Self {
         Self { token, whitelist, engine, mem, exchange, scanner }
@@ -223,48 +223,45 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_status or /btcstatus — spot account with BTC + USDT balance, open orders.
+    /// /btc_status or /btcstatus — account with BTC + USDT/USDC balance, open orders.
     async fn cmd_status(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let text = if let Some(ref exchange) = self.exchange {
             match exchange.get_balances().await {
                 Ok(balances) => {
                     let btc_bal = balances.iter().find(|b| b.asset == "BTC");
-                    let usdt_bal = balances.iter().find(|b| b.asset == "USDT");
-                    let btc_free: f64 = btc_bal.and_then(|b| b.free.parse().ok()).unwrap_or(0.0);
-                    let btc_locked: f64 = btc_bal.and_then(|b| b.locked.parse().ok()).unwrap_or(0.0);
-                    let usdt_free: f64 = usdt_bal.and_then(|b| b.free.parse().ok()).unwrap_or(0.0);
-                    let usdt_locked: f64 = usdt_bal.and_then(|b| b.locked.parse().ok()).unwrap_or(0.0);
+                    let stable_bal = balances.iter().find(|b| b.asset == "USDT" || b.asset == "USDC");
+                    let btc_free = btc_bal.map(|b| b.free).unwrap_or(0.0);
+                    let btc_locked = btc_bal.map(|b| b.locked).unwrap_or(0.0);
+                    let stable_free = stable_bal.map(|b| b.free).unwrap_or(0.0);
+                    let stable_locked = stable_bal.map(|b| b.locked).unwrap_or(0.0);
+                    let stable_asset = if stable_bal.is_some() {
+                        if balances.iter().any(|b| b.asset == "USDC") { "USDC" } else { "USDT" }
+                    } else { "USDT/USDC" };
 
                     let mut lines = vec![
-                        format!("💼 *Spot Account*"),
-                        format!("Exchange: Binance"),
+                        format!("💼 *Account*"),
+                        format!("Exchange: {}", escape_mdv2(exchange.exchange_name())),
                         format!("API Key: `{}`", escape_mdv2(&exchange.api_key_display())),
                         format!("BTC: {:.8} free \\| {:.8} locked", btc_free, btc_locked),
-                        format!("USDT: {:.2} free \\| {:.2} locked", usdt_free, usdt_locked),
+                        format!("{}: {:.2} free \\| {:.2} locked", stable_asset, stable_free, stable_locked),
                     ];
 
                     // Show other non-zero balances
                     let other: Vec<_> = balances.iter()
-                        .filter(|b| b.asset != "BTC" && b.asset != "USDT")
-                        .filter(|b| {
-                            let free: f64 = b.free.parse().unwrap_or(0.0);
-                            let locked: f64 = b.locked.parse().unwrap_or(0.0);
-                            free > 0.0 || locked > 0.0
-                        })
+                        .filter(|b| b.asset != "BTC" && b.asset != "USDT" && b.asset != "USDC")
+                        .filter(|b| b.free > 0.0 || b.locked > 0.0)
                         .collect();
                     if !other.is_empty() {
                         lines.push(String::new());
                         for b in other {
-                            let free: f64 = b.free.parse().unwrap_or(0.0);
-                            let locked: f64 = b.locked.parse().unwrap_or(0.0);
-                            lines.push(format!("{}: {:.8} free \\| {:.8} locked", escape_mdv2(&b.asset), free, locked));
+                            lines.push(format!("{}: {:.8} free \\| {:.8} locked", escape_mdv2(&b.asset), b.free, b.locked));
                         }
                     }
 
                     // Open orders across all pairs
                     if let Some(ref scanner) = self.scanner {
                         let pairs = scanner.get_pairs().await;
-                        let mut all_orders: Vec<crate::binance::BinanceOrder> = Vec::new();
+                        let mut all_orders: Vec<BtcAdvisoryPosition> = Vec::new();
                         for pair in &pairs {
                             if let Ok(orders) = exchange.get_open_orders(pair).await {
                                 all_orders.extend(orders);
@@ -274,16 +271,13 @@ impl BtcBot {
                             lines.push(String::new());
                             lines.push("*Open Orders*".to_string());
                             for o in &all_orders {
-                                let executed: f64 = o.executed_qty.parse().unwrap_or(0.0);
-                                let orig: f64 = o.orig_qty.parse().unwrap_or(1.0);
-                                let fill_pct = if orig > 0.0 { executed / orig * 100.0 } else { 0.0 };
                                 lines.push(format!(
-                                    "{} {}: {} {} \\- filled {:.0}%",
+                                    "{} {}: {} @ {} \\| filled {:.0}%",
                                     escape_mdv2(&o.side),
-                                    escape_mdv2(&o.symbol),
-                                    escape_mdv2(&o.orig_qty),
-                                    escape_mdv2(&o.status),
-                                    fill_pct,
+                                    escape_mdv2(&o.id),
+                                    o.size,
+                                    o.entry_price,
+                                    if o.size > 0.0 { 0.0 } else { 100.0 },
                                 ));
                             }
                         }
@@ -296,7 +290,7 @@ impl BtcBot {
         } else {
             "Exchange not configured. Set EXCHANGE_API_KEY and EXCHANGE_API_SECRET.".into()
         };
-        send_mdv2_safe(bot, msg.chat.id, &text).await?;
+        send_mdv2_safe(bot, msg.chat.id,&text).await?;
         Ok(())
     }
 
@@ -338,19 +332,7 @@ impl BtcBot {
                 default_market_data()
             });
             let orders = exchange.get_open_orders(&pair).await.ok().unwrap_or_default();
-            let positions: Vec<BtcAdvisoryPosition> = orders
-                .into_iter()
-                .map(|o| BtcAdvisoryPosition {
-                    id: o.order_id.to_string(),
-                    entry_price: o.price.parse().unwrap_or(0.0),
-                    current_price: 0.0,
-                    size: o.orig_qty.parse().unwrap_or(0.0),
-                    pnl_btc: 0.0,
-                    entry_time: String::new(),
-                    side: o.side,
-                })
-                .collect();
-            (md, positions)
+            (md, orders)
         } else {
             (default_market_data(), vec![])
         };
@@ -411,7 +393,7 @@ impl BtcBot {
             match self.scanner {
                 Some(ref scanner) => {
                     let pairs = scanner.get_pairs().await;
-                    let mut all_orders: Vec<crate::binance::BinanceOrder> = Vec::new();
+                    let mut all_orders: Vec<BtcAdvisoryPosition> = Vec::new();
                     for pair in &pairs {
                         if let Ok(orders) = exchange.get_open_orders(pair).await {
                             all_orders.extend(orders);
@@ -423,17 +405,13 @@ impl BtcBot {
                         let lines: Vec<String> = all_orders
                             .iter()
                             .map(|o| {
-                                let executed: f64 = o.executed_qty.parse().unwrap_or(0.0);
-                                let orig: f64 = o.orig_qty.parse().unwrap_or(1.0);
-                                let fill_pct = if orig > 0.0 { executed / orig * 100.0 } else { 0.0 };
                                 format!(
-                                    "{} {}: {} @ {} \\| {} \\| filled {:.0}%",
+                                    "{} {}: {} @ {} \\| filled {:.0}%",
                                     escape_mdv2(&o.side),
-                                    escape_mdv2(&o.symbol),
-                                    escape_mdv2(&o.orig_qty),
-                                    escape_mdv2(&o.price),
-                                    escape_mdv2(&o.status),
-                                    fill_pct,
+                                    escape_mdv2(&o.id),
+                                    o.size,
+                                    o.entry_price,
+                                    if o.size > 0.0 { 0.0 } else { 100.0 },
                                 )
                             })
                             .collect();
@@ -831,7 +809,7 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_cancel or /btccancel — cancel all open spot orders across all pairs.
+    /// /btc_cancel or /btccancel — cancel all open orders across all pairs.
     async fn cmd_cancel(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let text = if let Some(ref exchange) = self.exchange {
             match self.scanner {

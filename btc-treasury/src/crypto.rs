@@ -71,7 +71,7 @@ pub fn decrypt(encrypted_data: &[u8], password: &str) -> Result<String> {
 }
 
 fn derive_key(password: &str, salt: &[u8; SALT_LEN]) -> aes_gcm::Key<Aes256Gcm> {
-    let params = scrypt::Params::new(14, 8, 1, 16).expect("valid scrypt params");
+    let params = scrypt::Params::new(14, 8, 1, 32).expect("valid scrypt params");
     let mut key_bytes = [0u8; 32];
     scrypt::scrypt(password.as_bytes(), salt, &params, &mut key_bytes)
         .expect("scrypt key derivation should not fail");
