@@ -237,6 +237,21 @@ async fn scan_pair(
 
     let treasury = mem.get_treasury_state();
 
+    // Check trading pause
+    if !treasury.trading_paused_until.is_empty() {
+        if let Ok(paused) = chrono::DateTime::parse_from_rfc3339(&treasury.trading_paused_until) {
+            if chrono::Utc::now() < paused {
+                tracing::debug!("Scanner [{}]: skipping (trading paused until {})", pair, paused);
+                return;
+            }
+        }
+    }
+
+    let config = mem.get_config();
+    if config.dry_run {
+        tracing::debug!("Scanner [{}]: dry_run mode active", pair);
+    }
+
     let stored_positions = mem.get_positions();
     let loss_streak = {
         let mut streak = 0;

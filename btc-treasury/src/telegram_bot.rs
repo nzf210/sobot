@@ -1356,6 +1356,18 @@ impl BtcBot {
         };
 
         let cfg = self.mem.get_config();
+        let ts = self.mem.get_treasury_state();
+
+        // Check trading pause
+        if !ts.trading_paused_until.is_empty() {
+            if let Ok(paused) = chrono::DateTime::parse_from_rfc3339(&ts.trading_paused_until) {
+                if chrono::Utc::now() < paused {
+                    bot_send_plain(bot, msg, &format!("⏸️ Trading is PAUSED until {}\nUse /btc_resume to resume.", paused.format("%Y-%m-%d %H:%M UTC"))).await?;
+                    return Ok(());
+                }
+            }
+        }
+
         let positions = self.mem.get_positions();
         if positions.is_empty() {
             bot_send_plain(bot, msg, "No open positions to close").await?;
@@ -1426,6 +1438,19 @@ impl BtcBot {
                 return Ok(());
             }
         };
+
+        let cfg = self.mem.get_config();
+        let ts = self.mem.get_treasury_state();
+
+        // Check trading pause
+        if !ts.trading_paused_until.is_empty() {
+            if let Ok(paused) = chrono::DateTime::parse_from_rfc3339(&ts.trading_paused_until) {
+                if chrono::Utc::now() < paused {
+                    bot_send_plain(bot, msg, &format!("⏸️ Trading is PAUSED until {}\nUse /btc_resume to resume.", paused.format("%Y-%m-%d %H:%M UTC"))).await?;
+                    return Ok(());
+                }
+            }
+        }
 
         let idx_str = match args {
             Some(ref s) if !s.trim().is_empty() => s.trim().to_string(),
@@ -1504,6 +1529,19 @@ impl BtcBot {
                 return Ok(());
             }
         };
+
+        let cfg = self.mem.get_config();
+        let ts = self.mem.get_treasury_state();
+
+        // Check trading pause
+        if !ts.trading_paused_until.is_empty() {
+            if let Ok(paused) = chrono::DateTime::parse_from_rfc3339(&ts.trading_paused_until) {
+                if chrono::Utc::now() < paused {
+                    bot_send_plain(bot, msg, &format!("⏸️ Trading is PAUSED until {}\nUse /btc_resume to resume.", paused.format("%Y-%m-%d %H:%M UTC"))).await?;
+                    return Ok(());
+                }
+            }
+        }
 
         let positions = self.mem.get_positions();
         if positions.is_empty() {
