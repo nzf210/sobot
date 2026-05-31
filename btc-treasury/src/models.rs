@@ -358,6 +358,8 @@ pub struct BtcConfig {
     pub compound_pct: f64,
     #[serde(default = "default_treasury_pct")]
     pub treasury_pct: f64,
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 fn default_take_profit_pct() -> f64 { 5.5 }
@@ -393,6 +395,7 @@ impl Default for BtcConfig {
             min_score_threshold: 80.0,
             compound_pct: 0.50,
             treasury_pct: 0.50,
+            dry_run: false,
         }
     }
 }

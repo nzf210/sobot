@@ -44,8 +44,15 @@ const HELP_TEXT: &str = r#"🤖 *BTC Treasury Accumulation* — Binance Spot
 
 *Trading \(Binance Spot\)*
 /btc\_buy \<SIZE\> \<PAIR\> — Market buy with dynamic TP/SL
-/btc\_sell — Close position at market price
+/btc\_sell — Close ALL positions at market price
+/btc\_close \<index\> — Close position by index \(1\-based\)
+/btc\_closeall — Force close all positions
 /btc\_cancel — Cancel all open orders
+
+*Bot Control*
+/btc\_dryrun on\|off — Toggle dry run mode \(simulation\)
+/btc\_pause — Pause trading \(24h\) 
+/btc\_resume — Resume trading
 
 *Configuration*
 /btc\_config — Current config \(TP/SL/thresholds\)
@@ -258,7 +265,12 @@ impl BtcBot {
             "btcdisable" => self.cmd_disable(bot, msg).await,
             "btcbuy" => self.cmd_buy(bot, msg, args).await,
             "btcsell" => self.cmd_sell(bot, msg, args).await,
+            "btcclose" => self.cmd_close(bot, msg, args).await,
+            "btccloseall" => self.cmd_closeall(bot, msg, args).await,
             "btccancel" => self.cmd_cancel(bot, msg).await,
+            "btcdryrun" => self.cmd_dryrun(bot, msg, args).await,
+            "btcpause" => self.cmd_pause(bot, msg).await,
+            "btcresume" => self.cmd_resume(bot, msg).await,
             "start" => self.cmd_help(bot, msg).await,
             _ => bot_send_plain(bot, msg, "Unknown command. Use /help").await,
         };
@@ -288,9 +300,11 @@ impl BtcBot {
                     let stable_asset = if balances.iter().any(|b| b.asset == "USDC") { "USDC" } else { "USDT" };
 
                     let ts = self.mem.get_treasury_state();
+                    let cfg = self.mem.get_config();
                     let mut lines = vec![
                         format!("💼 *Account — Binance Spot*"),
                         format!("Exchange: {}", escape_mdv2(exchange.exchange_name())),
+                        format!("Mode: {}", if cfg.dry_run { "🧪 DRY RUN" } else { "🔴 LIVE" }),
                         format!("API Key: `{}`", escape_mdv2(&exchange.api_key_display())),
                         format!("{}: {:.2} free \\| {:.2} locked", stable_asset, stable_free, stable_locked),
                         format!(""),
@@ -300,6 +314,10 @@ impl BtcBot {
                         format!("Compound: {:.8}", ts.compound_balance),
                         format!("Trades: {} \\| Win: {} \\| Loss: {}", ts.total_trades, ts.winning_trades, ts.losing_trades),
                     ];
+
+                    if !ts.trading_paused_until.is_empty() {
+                        lines.push(format!("⏸️ *Paused Until:* {}", escape_mdv2(&ts.trading_paused_until)));
+                    }
 
                     // Show other non-zero balances
                     let other: Vec<_> = balances.iter()
@@ -926,6 +944,7 @@ impl BtcBot {
             "⚙️ *Config — BTC Treasury Accumulation*\n\n\
             *Trading*\n\
             Exchange: Binance Spot\n\
+            Mode: {}\n\
             Initial Capital: ${:.2}\n\
             Max Positions: {}\n\
             Risk/Trade: {:.1}%\n\n\
@@ -946,7 +965,9 @@ impl BtcBot {
             Pause on Drawdown > 10%\n\n\
             *Scanner*\n\
             Pairs: {}\n\
-            Win Rate: {:.1}%",
+            Win Rate: {:.1}%\n\
+            Paused Until: {}",
+            if cfg.dry_run { "🧪 DRY RUN" } else { "🔴 LIVE" },
             cfg.initial_capital_usdt,
             cfg.max_positions,
             cfg.risk_per_trade_pct * 100.0,
@@ -963,6 +984,7 @@ impl BtcBot {
             cfg.daily_loss_limit_btc,
             cfg.scanner_pairs.len(),
             win_rate,
+            if ts.trading_paused_until.is_empty() { "—".to_string() } else { ts.trading_paused_until.clone() },
         );
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
@@ -1069,6 +1091,15 @@ impl BtcBot {
                     }
                 }
             }
+            "dry_run" => {
+                match val.parse::<bool>() {
+                    Ok(v) => { cfg.dry_run = v; (true, val.to_string()) }
+                    Err(_) => {
+                        bot_send_plain(bot, msg, &format!("Invalid boolean for 'dry_run': '{}'. Use true or false.", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
             // Legacy keys still supported
             "llm_activation_threshold" | "min_confidence" | "max_exposure" | "safe_mode_volatility" | "safe_mode_drawdown" => {
                 match val.parse::<f64>() {
@@ -1109,7 +1140,7 @@ impl BtcBot {
                 }
             }
             _ => {
-                bot_send_plain(bot, msg, "Available keys:\n  take_profit_pct, stop_loss_pct, trailing_tp_pct, use_trailing\n  min_score_threshold, risk_per_trade_pct, max_positions\n  compound_pct, initial_capital_usdt\n  enabled, llm_activation_threshold, min_confidence, max_exposure\n  max_consecutive_losses, daily_loss_limit_btc\n\nExample: /btc_setconfig take_profit_pct 6.0").await?;
+                bot_send_plain(bot, msg, "Available keys:\n  take_profit_pct, stop_loss_pct, trailing_tp_pct, use_trailing\n  min_score_threshold, risk_per_trade_pct, max_positions\n  compound_pct, initial_capital_usdt, dry_run\n  enabled, llm_activation_threshold, min_confidence, max_exposure\n  max_consecutive_losses, daily_loss_limit_btc\n\nExample: /btc_setconfig take_profit_pct 6.0").await?;
                 return Ok(());
             }
         };
@@ -1208,6 +1239,36 @@ impl BtcBot {
 
         let _ = bot_send_plain(bot, msg, &format!("📈 Placing BUY order on Binance Spot...\n{} {} @ market price...", size, pair)).await;
 
+        let cfg = self.mem.get_config();
+        let ts = self.mem.get_treasury_state();
+
+        // Check trading pause
+        if !ts.trading_paused_until.is_empty() {
+            if let Ok(paused) = chrono::DateTime::parse_from_rfc3339(&ts.trading_paused_until) {
+                if chrono::Utc::now() < paused {
+                    bot_send_plain(bot, msg, &format!("⏸️ Trading is PAUSED until {}\nUse /btc_resume to resume.", paused.format("%Y-%m-%d %H:%M UTC"))).await?;
+                    return Ok(());
+                }
+            }
+        }
+
+        // Dry run mode
+        if cfg.dry_run {
+            let advisory = self.engine.analyze(&BtcAdvisoryInput {
+                market_data: exchange.get_market_data(&pair).await.unwrap_or_else(|_| default_market_data()),
+                treasury: ts,
+                open_positions: self.mem.get_positions(),
+                loss_streak: 0,
+            }).await;
+            let current_price = exchange.get_current_price(&pair).await.unwrap_or(0.0);
+            record_position_from_advisory(&*self.mem, &advisory, current_price, size, &pair, "buy");
+            send_mdv2_safe(
+                bot, msg.chat.id,
+                &format!("🧪 *DRY RUN — Simulated Buy*\nPair: {}\nSize: {}\nTP: {:.1}% | SL: {:.1}%\nReason: {}", escape_mdv2(&pair), size, advisory.dynamic_take_profit, advisory.dynamic_stop_loss, escape_mdv2(&advisory.tp_reason))
+            ).await?;
+            return Ok(());
+        }
+
         // Run advisory to get LLM dynamic TP/SL
         let market_data = match exchange.get_market_data(&pair).await {
             Ok(m) => m,
@@ -1294,9 +1355,27 @@ impl BtcBot {
             }
         };
 
+        let cfg = self.mem.get_config();
         let positions = self.mem.get_positions();
         if positions.is_empty() {
             bot_send_plain(bot, msg, "No open positions to close").await?;
+            return Ok(());
+        }
+
+        if cfg.dry_run {
+            let mut results: Vec<String> = Vec::new();
+            for pos in &positions {
+                self.mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size);
+                let lesson = format!(
+                    "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Manual close via /btc_sell.",
+                    pos.id, pos.pnl_btc, pos.size
+                );
+                self.mem.add_lesson(lesson);
+                results.push(format!("{} — PnL: {:.2}%", escape_mdv2(&pos.id), pos.pnl_btc));
+            }
+            self.mem.save_positions(&[]);
+            let text = format!("🧪 *DRY RUN — Simulated Close All*\n\n{}", results.join("\n"));
+            send_mdv2_safe(bot, msg.chat.id, &text).await?;
             return Ok(());
         }
 
@@ -1335,6 +1414,198 @@ impl BtcBot {
 
         let text = format!("*Close Results — Binance Spot*\n\n{}", results.join("\n"));
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
+        Ok(())
+    }
+
+    /// /btc_close <index> — close position by index (1-based).
+    async fn cmd_close(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
+        let exchange = match &self.exchange {
+            Some(e) => e,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+
+        let idx_str = match args {
+            Some(ref s) if !s.trim().is_empty() => s.trim().to_string(),
+            _ => {
+                bot_send_plain(bot, msg, "Usage: /btc_close <index>\nExample: /btc_close 1\n\nUse /btc_positions to see indices.").await?;
+                return Ok(());
+            }
+        };
+
+        let idx: usize = match idx_str.parse::<usize>() {
+            Ok(i) if i >= 1 => i - 1,
+            _ => {
+                bot_send_plain(bot, msg, &format!("Invalid index: '{}'. Must be a positive number.", idx_str)).await?;
+                return Ok(());
+            }
+        };
+
+        let mut positions = self.mem.get_positions();
+        if idx >= positions.len() {
+            bot_send_plain(bot, msg, &format!("Position #{} not found. You have {} open positions.", idx + 1, positions.len())).await?;
+            return Ok(());
+        }
+
+        let pos = &positions[idx];
+        let pair = pos.id.clone();
+        let size = pos.size;
+        let entry_price = pos.entry_price;
+        let pnl_pct = pos.pnl_btc;
+
+        let cfg = self.mem.get_config();
+        if cfg.dry_run {
+            self.mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size);
+            let lesson = format!(
+                "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Manual close via /btc_close. TP: {:.1}%, SL: {:.1}%",
+                pair, pnl_pct, size, pos.take_profit_pct, pos.stop_loss_pct
+            );
+            self.mem.add_lesson(lesson);
+            positions.remove(idx);
+            self.mem.save_positions(&positions);
+            send_mdv2_safe(
+                bot, msg.chat.id,
+                &format!("🧪 *DRY RUN* — Simulated close\n✅ #{} {} — size: {} | PnL: {:.2}%", idx + 1, escape_mdv2(&pair), size, pnl_pct)
+            ).await?;
+            return Ok(());
+        }
+
+        let _ = exchange.cancel_all(&pair).await;
+        match exchange.place_market_sell(&pair, size).await {
+            Ok(result) => {
+                self.mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size);
+                let lesson = format!(
+                    "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Manual close via /btc_close. TP: {:.1}%, SL: {:.1}%",
+                    pair, pnl_pct, size, pos.take_profit_pct, pos.stop_loss_pct
+                );
+                self.mem.add_lesson(lesson);
+                positions.remove(idx);
+                self.mem.save_positions(&positions);
+                send_mdv2_safe(
+                    bot, msg.chat.id,
+                    &format!("✅ #{} {} closed — {} | PnL: {:.2}%", idx + 1, escape_mdv2(&pair), result.order_id, pnl_pct)
+                ).await?;
+            }
+            Err(e) => {
+                bot_send_plain(bot, msg, &format!("❌ Failed to close #{} {}: {}", idx + 1, pair, e)).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// /btc_closeall — force close all positions.
+    async fn cmd_closeall(&self, bot: &Bot, msg: &Message, _args: Option<String>) -> Result<(), teloxide::RequestError> {
+        let exchange = match &self.exchange {
+            Some(e) => e,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+
+        let positions = self.mem.get_positions();
+        if positions.is_empty() {
+            bot_send_plain(bot, msg, "No open positions to close").await?;
+            return Ok(());
+        }
+
+        let cfg = self.mem.get_config();
+        let mut results: Vec<String> = Vec::new();
+
+        if cfg.dry_run {
+            for pos in &positions {
+                self.mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size);
+                let lesson = format!(
+                    "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Force closeall.",
+                    pos.id, pos.pnl_btc, pos.size
+                );
+                self.mem.add_lesson(lesson);
+                results.push(format!("🧪 {} — DRY RUN close | PnL: {:.2}%", escape_mdv2(&pos.id), pos.pnl_btc));
+            }
+            self.mem.save_positions(&[]);
+            let text = format!("🧪 *DRY RUN — Force Close All*\n\n{}", results.join("\n"));
+            send_mdv2_safe(bot, msg.chat.id, &text).await?;
+            return Ok(());
+        }
+
+        for pos in &positions {
+            let pair = &pos.id;
+            let size = pos.size;
+            let _ = exchange.cancel_all(pair).await;
+            match exchange.place_market_sell(pair, size).await {
+                Ok(result) => {
+                    self.mem.update_treasury_on_close(pair, pos.pnl_btc, pos.entry_price * size);
+                    let lesson = format!(
+                        "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Force closeall.",
+                        pair, pos.pnl_btc, size
+                    );
+                    self.mem.add_lesson(lesson);
+                    results.push(format!("✅ {} closed — {} | PnL: {:.2}%", escape_mdv2(pair), result.order_id, pos.pnl_btc));
+                }
+                Err(e) => {
+                    results.push(format!("❌ {} failed: {}", escape_mdv2(pair), e));
+                }
+            }
+        }
+        self.mem.save_positions(&[]);
+        let text = format!("*Force Close All — Binance Spot*\n\n{}", results.join("\n"));
+        send_mdv2_safe(bot, msg.chat.id, &text).await?;
+        Ok(())
+    }
+
+    /// /btc_dryrun on|off — toggle dry run mode.
+    async fn cmd_dryrun(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
+        let arg = match args {
+            Some(ref s) => s.trim().to_lowercase(),
+            None => {
+                let cfg = self.mem.get_config();
+                let current = if cfg.dry_run { "ON 🧪 (simulation)" } else { "OFF 🔴 (LIVE)" };
+                bot_send_plain(bot, msg, &format!("Dry Run is currently: {}\n\nUse:\n  /btc_dryrun on  — enable simulation\n  /btc_dryrun off — enable live trading", current)).await?;
+                return Ok(());
+            }
+        };
+
+        match arg.as_str() {
+            "on" => {
+                let mut cfg = self.mem.get_config();
+                cfg.dry_run = true;
+                self.mem.save_config(&cfg);
+                send_mdv2_safe(bot, msg.chat.id, "🧪 *DRY RUN enabled*\nAll trades will be simulated. No real orders on Binance.").await?;
+            }
+            "off" => {
+                let mut cfg = self.mem.get_config();
+                cfg.dry_run = false;
+                self.mem.save_config(&cfg);
+                send_mdv2_safe(bot, msg.chat.id, "🔴 *LIVE TRADING enabled*\n⚠️ All orders WILL execute on Binance Spot!").await?;
+            }
+            _ => {
+                bot_send_plain(bot, msg, &format!("Invalid: '{}'. Use 'on' or 'off'.\n\n/btc_dryrun on  — simulation\n/btc_dryrun off — live trading", arg)).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// /btc_pause — pause trading for 24 hours.
+    async fn cmd_pause(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
+        let mut ts = self.mem.get_treasury_state();
+        let paused_until = chrono::Utc::now() + chrono::Duration::hours(24);
+        ts.trading_paused_until = paused_until.to_rfc3339();
+        self.mem.save_treasury_state(ts);
+        send_mdv2_safe(
+            bot, msg.chat.id,
+            &format!("⏸️ *Trading PAUSED*\nResumes: {}\n\nAll buy/sell commands and auto-execution are blocked until then.", escape_mdv2(&paused_until.format("%Y-%m-%d %H:%M UTC").to_string()))
+        ).await?;
+        Ok(())
+    }
+
+    /// /btc_resume — resume trading (clear pause).
+    async fn cmd_resume(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
+        let mut ts = self.mem.get_treasury_state();
+        ts.trading_paused_until = String::new();
+        self.mem.save_treasury_state(ts);
+        send_mdv2_safe(bot, msg.chat.id, "▶️ *Trading RESUMED*\nAll commands and auto-execution are now active.").await?;
         Ok(())
     }
 }

@@ -20,5 +20,11 @@
   "take_profit_pct": 20.0,
   "stop_loss_pct": -10.0,
   "trailing_tp_pct": 12.0,
-  "use_trailing": false
+  "use_trailing": false,
+  "max_positions": 1,
+  "risk_per_trade_pct": 0.01,
+  "initial_capital_usdt": 50.0,
+  "min_score_threshold": 80.0,
+  "compound_pct": 0.5,
+  "treasury_pct": 0.5
 }

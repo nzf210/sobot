@@ -132,25 +132,38 @@ impl PositionMonitor {
             }
 
             if should_close {
+                let cfg = self.mem.get_config();
                 tracing::info!("Closing BTC position {}: {}", pair_id, close_reason);
                 modified = true;
 
-                // Execute market sell to close the position
                 let position_size = positions[i].size;
                 let entry = positions[i].entry_price;
-                let close_result = exchange.place_market_sell(&pair_id, position_size).await;
-                match close_result {
-                    Ok(result) => {
-                        tracing::info!(
-                            "Position {} closed via market sell: order_id={}, status={}",
-                            pair_id, result.order_id, result.status
-                        );
-                        // Update BTC treasury with realized PnL
-                        let position_value_usdt = entry * position_size;
-                        self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value_usdt);
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to execute market sell for {}: {}", pair_id, e);
+
+                if cfg.dry_run {
+                    // Dry run: simulate close without calling exchange
+                    let position_value_usdt = entry * position_size;
+                    self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value_usdt);
+                    tracing::info!(
+                        "[DRY RUN] Position {} simulated close: PnL {:.2}%",
+                        pair_id, pnl_pct
+                    );
+                } else {
+                    // Live: execute market sell to close the position
+                    let close_result = exchange.place_market_sell(&pair_id, position_size).await;
+                    match close_result {
+                        Ok(result) => {
+                            tracing::info!(
+                                "Position {} closed via market sell: order_id={}, status={}",
+                                pair_id, result.order_id, result.status
+                            );
+                            // Update BTC treasury with realized PnL
+                            let position_value_usdt = entry * position_size;
+                            self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value_usdt);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to execute market sell for {}: {}", pair_id, e);
+                            continue;
+                        }
                     }
                 }
 
