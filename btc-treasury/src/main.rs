@@ -1,13 +1,17 @@
 mod binance;
 mod config;
 mod crypto;
+mod engines;
 mod engine;
 mod exchange;
+mod execution_engine;
 mod format;
 mod hyperliquid;
+mod indicators;
 mod llm;
 mod memory;
 mod models;
+mod position_monitor;
 mod reporter;
 mod sanitize;
 mod scanner;
@@ -21,6 +25,7 @@ use tracing_subscriber::EnvFilter;
 use crate::binance::BinanceClient;
 use crate::exchange::ExchangeClient;
 use crate::hyperliquid::HyperliquidClient;
+use crate::position_monitor::PositionMonitor;
 use crate::scanner::ScannerState;
 
 #[actix_web::main]
@@ -118,6 +123,18 @@ async fn main() -> std::io::Result<()> {
         tracing::warn!("Scanner disabled — exchange API key not configured");
         None
     };
+
+    // Position Monitor (TP/SL checker)
+    if exchange_client.is_some() {
+        let mem = Arc::clone(&shared.mem);
+        let exchange = Arc::clone(exchange_client.as_ref().unwrap());
+        let engine = Arc::clone(&shared.engine);
+        let monitor = Arc::new(PositionMonitor::new(mem, Some(exchange), engine));
+        tokio::spawn(async move {
+            monitor.start().await;
+        });
+        tracing::info!("BTC Position Monitor started");
+    }
 
     // Reporter
     if !cfg.telegram_report_chat_ids.is_empty() {

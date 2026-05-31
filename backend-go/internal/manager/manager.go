@@ -77,41 +77,55 @@ func (m *Manager) checkPositions() {
 		pnlPct := ((metric.PriceSOL - pos.EntryPrice) / pos.EntryPrice) * 100.0
 		highestPnlPct := ((pos.HighestPrice - pos.EntryPrice) / pos.EntryPrice) * 100.0
 
+		// Resolve TP/SL: use position-specific (LLM) if set, else fall back to config
+		takeProfitPct := cfg.TakeProfitPct
+		stopLossPct := cfg.StopLossPct
+		if pos.TakeProfitPct > 0 {
+			takeProfitPct = pos.TakeProfitPct
+		}
+		if pos.StopLossPct != 0 {
+			stopLossPct = pos.StopLossPct
+		}
+
+		// Trailing TP: use position-specific if set, else momentum-based
+		trailPct := 10.0
+		if pos.TrailingTPPct > 0 {
+			trailPct = pos.TrailingTPPct
+		}
+
 		// Analyze momentum for smart trailing
 		momentumResult := m.momentum.Analyze(pos, metric)
-
 		shouldClose := false
 		var closeReason string
 
-		// Smart trailing: auto-activate if high momentum detected
-		useTrailing := cfg.TrailingTakeProfit || momentumResult.ShouldTrail
-		trailPct := 10.0
-		if momentumResult.ShouldTrail {
+		// Smart trailing: auto-activate if high momentum or position uses trailing
+		useTrailing := (cfg.TrailingTakeProfit || pos.UseTrailing) || momentumResult.ShouldTrail
+		if momentumResult.ShouldTrail && pos.TrailingTPPct > 0 {
 			trailPct = momentumResult.TrailPct
-			m.log.Info("Smart trailing activated",
+			m.log.Info("Smart trailing activated (overriding momentum)",
 				zap.String("token", pos.TokenAddress),
 				zap.Float64("trail_pct", trailPct),
 				zap.Int("momentum_level", int(momentumResult.Level)),
 				zap.String("reason", momentumResult.Reason))
 		}
 
-		if useTrailing && highestPnlPct >= cfg.TakeProfitPct {
+		if useTrailing && highestPnlPct >= takeProfitPct {
 			dropFromHighPct := ((pos.HighestPrice - metric.PriceSOL) / pos.HighestPrice) * 100.0
 			if dropFromHighPct >= trailPct {
 				shouldClose = true
-				if momentumResult.ShouldTrail {
-					closeReason = fmt.Sprintf("Smart Trailing Stop: dropped %.1f%% from peak (Peak PnL: %.2f%%, Trail: %.0f%%, Momentum: %s)",
-						dropFromHighPct, highestPnlPct, trailPct, momentumResult.Reason)
+				if pos.UseTrailing || momentumResult.ShouldTrail {
+					closeReason = fmt.Sprintf("Smart Trailing Stop: dropped %.1f%% from peak (Peak PnL: %.2f%%, Trail: %.0f%%, TP: %.1f%%, SL: %.1f%%, Momentum: %s)",
+						dropFromHighPct, highestPnlPct, trailPct, takeProfitPct, stopLossPct, momentumResult.Reason)
 				} else {
-					closeReason = fmt.Sprintf("Trailing Stop hit: dropped %.1f%% from peak (Peak PnL was %.2f%%)", dropFromHighPct, highestPnlPct)
+					closeReason = fmt.Sprintf("Trailing Stop hit: dropped %.1f%% from peak (Peak PnL was %.2f%%, TP: %.1f%%)", dropFromHighPct, highestPnlPct, takeProfitPct)
 				}
 			}
-		} else if !useTrailing && pnlPct >= cfg.TakeProfitPct {
+		} else if !useTrailing && pnlPct >= takeProfitPct {
 			shouldClose = true
-			closeReason = fmt.Sprintf("Take Profit hit at %.2f%%", pnlPct)
-		} else if pnlPct <= cfg.StopLossPct {
+			closeReason = fmt.Sprintf("Take Profit hit at %.2f%% (target: %.1f%%)", pnlPct, takeProfitPct)
+		} else if pnlPct <= stopLossPct {
 			shouldClose = true
-			closeReason = fmt.Sprintf("Stop Loss hit at %.2f%%", pnlPct)
+			closeReason = fmt.Sprintf("Stop Loss hit at %.2f%% (limit: %.1f%%)", pnlPct, stopLossPct)
 		}
 
 		if shouldClose {
@@ -135,9 +149,9 @@ func (m *Manager) checkPositions() {
 					quality = "neutral"
 				}
 
-				lesson := fmt.Sprintf("[DRY RUN][%s] Token %s: PnL %.2f%% (peak %.2f%%), held %s. Entry: %.8f SOL, Exit: %.8f SOL. Decision quality: %s. Close reason: %s",
+				lesson := fmt.Sprintf("[DRY RUN][%s] Token %s: PnL %.2f%% (peak %.2f%%), held %s. Entry: %.8f SOL, Exit: %.8f SOL. Decision quality: %s. Close reason: %s. TP: %.1f%%, SL: %.1f%%",
 					time.Now().Format("2006-01-02 15:04"), pos.TokenAddress[:8]+"...", pnlPct, highestPnlPct,
-					formatDuration(time.Since(pos.EntryTime)), pos.EntryPrice, metric.PriceSOL, quality, closeReason)
+					formatDuration(time.Since(pos.EntryTime)), pos.EntryPrice, metric.PriceSOL, quality, closeReason, takeProfitPct, stopLossPct)
 				m.mem.AddLesson(lesson)
 
 				msg := fmt.Sprintf("🧪 *[DRY RUN] Simulasi SELL*\n*Token:* `%s`\n*PnL Sim:* %.2f%% (peak: %.2f%%)\n*Held:* %s\n*Quality:* %s\n*Reason:* %s\n⚠️ _Tidak ada transaksi nyata._",

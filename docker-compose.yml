@@ -1,17 +1,15 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend-go
     container_name: solana-hybrid-backend
     ports:
-      - "${BACKEND_PORT:-8080}:${BACKEND_PORT:-8080}"
+      - "${BACKEND_PORT:-8089}:${BACKEND_PORT:-8089}"
     env_file:
       - .env
     volumes:
       - ./data/memory:/app/data/memory
     environment:
-      - EXECUTOR_PORT=${EXECUTOR_PORT:-3000}
+      - EXECUTOR_PORT=${EXECUTOR_PORT:-3009}
       - EXECUTOR_HOST=executor
       - EXECUTOR_API_KEY=${EXECUTOR_API_KEY}
     restart: unless-stopped
@@ -22,7 +20,7 @@ services:
     build: ./executor-ts
     container_name: solana-hybrid-executor
     ports:
-      - "${EXECUTOR_PORT:-3000}:${EXECUTOR_PORT:-3000}"
+      - "${EXECUTOR_PORT:-3009}:${EXECUTOR_PORT:-3009}"
     env_file:
       - .env
     volumes:
@@ -45,8 +43,9 @@ services:
       - ./hyperliquid.enc:/app/hyperliquid.enc
       - ./data/btc-treasury:/app/data/btc-treasury
     environment:
-      - HYPERLIQUID_KEY_PATH=hyperliquid.enc
+      - HYPERLIQUID_KEY_PATH=/app/hyperliquid.enc
       - DATA_DIR=/app/data/btc-treasury
+      - WALLET_PASSWORD=${WALLET_PASSWORD}
     restart: unless-stopped
     networks:
       - solana-net

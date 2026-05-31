@@ -1730,5 +1730,225 @@
   {
     "date": "2026-05-31T08:34:24Z",
     "lesson": "[2026-05-31 08:32] Token EA6Z5sktKUt1... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T08:39:24Z",
+    "lesson": "[2026-05-31 08:36] Token JDJqNPXupAhN... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T08:49:24Z",
+    "lesson": "[2026-05-31 08:47] Token c4joCgNH1DqD... ditolak karena: Rule Engine: Market cap 6754723.84 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T08:54:25Z",
+    "lesson": "[2026-05-31 08:51] Token 2groaTYtxGUD... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T08:54:25Z",
+    "lesson": "[2026-05-31 08:53] Token D3XCzYDnw1jc... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T08:59:24Z",
+    "lesson": "[2026-05-31 08:57] Token GrrcHxNLQitN... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T08:59:24Z",
+    "lesson": "[2026-05-31 08:57] Token GWedCE4fHTMV... ditolak karena: Rule Engine: Market cap 6731067.25 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T09:14:25Z",
+    "lesson": "[2026-05-31 09:09] Token 2groaTYtxGUD... ditolak karena: Rule Engine: Market cap 2311991.28 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token Hv9vRYggtUgJ... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token Gz1E8LvmWw5w... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token BsiJXaPJrDcF... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token CtCVdxZZmiJY... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token y9VDHett9y9W... ditolak karena: Rule Engine: Market cap 1405600.00 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 4JxLTRrSQ4fc... ditolak karena: Rule Engine: Organic score 60 below minimum 70; Market cap 473963.64 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token CGeW5i9MuDiQ... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token AtFVSLJcr4Wi... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 7s9LTg3ktrXg... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token DUZSChwYfq1q... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 2wNSoWabfqSj... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 9uJvAmV8Evf9... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token ECsqJ6iZ7tEt... ditolak karena: Rule Engine: Market cap 5909018.18 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token EwPxjYQ2V8r2... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token HAytudteqxtE... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token CLrnsoHD1wXj... ditolak karena: Rule Engine: Market cap 4409163.64 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 7S8Hj85YkUmW... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 5gGmEntV6ete... ditolak karena: Rule Engine: Market cap 8559272.73 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token HGwje6B2Yo7e... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token D3pp7jBexzfh... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 7Fs1F5u9y8mF... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 8XcqXA95ycuo... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 8cXCqug1d43b... ditolak karena: Rule Engine: Market cap 338690.91 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token hYz9LGSp8cBC... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 2geZzQGsFkgi... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 5Umo7FpVnevv... ditolak karena: Rule Engine: 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 135054.55 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token HTP9DkFua8ng... ditolak karena: Rule Engine: 5m volume 0.00 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 202327.27 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 9VsMhN46CJdn... ditolak karena: Rule Engine: Organic score 55 below minimum 70; Wash trade probability 70% exceeds maximum 25%; Market cap 125381.82 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:05:25Z",
+    "lesson": "[2026-05-31 14:00] Token 5HHbEpxo733L... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:15:26Z",
+    "lesson": "[2026-05-31 14:14] Token CBgXb5i9pNi1... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:25:25Z",
+    "lesson": "[2026-05-31 14:21] Token CtCVdxZZmiJY... ditolak karena: Rule Engine: 5m volume 8.08 SOL below minimum 33.00 SOL; Organic score 55 below minimum 70; Market cap 1850918.44 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:30:25Z",
+    "lesson": "[2026-05-31 14:28] Token EQP2gc43BSBi... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:30:25Z",
+    "lesson": "[2026-05-31 14:28] Token 7KsQ9zH6fCvn... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:30:25Z",
+    "lesson": "[2026-05-31 14:29] Token 2uTzpraAzGp8... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:35:25Z",
+    "lesson": "[2026-05-31 14:34] Token EpjybqRfiFnL... ditolak karena: Rule Engine: Market cap 2273851.85 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:40:25Z",
+    "lesson": "[2026-05-31 14:37] Token 9e4co6rQEGX2... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:40:25Z",
+    "lesson": "[2026-05-31 14:39] Token F32hbznJxYNq... ditolak karena: Rule Engine: Market cap 1632786.89 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:45:25Z",
+    "lesson": "[2026-05-31 14:44] Token iVhaP5XWNc7f... ditolak karena: Rule Engine: Market cap 245629.63 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:45:25Z",
+    "lesson": "[2026-05-31 14:45] Token 9e4co6rQEGX2... ditolak karena: Rule Engine: Market cap 2026378.54 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T14:50:25Z",
+    "lesson": "[2026-05-31 14:46] Token AAnTqwodQ2Ke... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T14:55:25Z",
+    "lesson": "[2026-05-31 14:51] Token 2RK9hGByWTku... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T15:00:25Z",
+    "lesson": "[2026-05-31 14:58] Token AAnTqwodQ2Ke... ditolak karena: Rule Engine: Market cap 2572666.67 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T15:00:25Z",
+    "lesson": "[2026-05-31 14:59] Token FvJjBLwvz4dB... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T15:05:25Z",
+    "lesson": "[2026-05-31 15:02] Token Fkwqho4nBLyu... ditolak karena: Rule Engine: Market cap 3357898.66 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T15:05:25Z",
+    "lesson": "[2026-05-31 15:03] Token HFq1GAEfsFam... ditolak karena: Rule Engine: Market cap 39310962.96 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T15:15:25Z",
+    "lesson": "[2026-05-31 15:14] Token 3wLGyU7Z8CS8... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T15:20:25Z",
+    "lesson": "[2026-05-31 15:16] Token 6by6P8WUSYbi... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T15:20:25Z",
+    "lesson": "[2026-05-31 15:20] Token 7ZmbiLjfVJHU... ditolak karena: Rule Engine: Market cap 5525335.32 SOL exceeds maximum 66000.00 SOL"
   }
 ]

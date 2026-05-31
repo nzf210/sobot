@@ -13,7 +13,7 @@ use crate::models::BtcMarketData;
 const BASE_URL: &str = "https://api.hyperliquid.xyz";
 
 pub struct HyperliquidClient {
-    base_url: String,
+    pub(crate) base_url: String,
     api_key: String,
     signing_key: SigningKey,
     client: reqwest::Client,
@@ -436,6 +436,23 @@ impl HyperliquidClient {
                 sz: format!("{:.8}", size),
                 px: "".to_string(),
                 side: "Buy".to_string(),
+                sym: symbol.to_string(),
+                cloid: None,
+            },
+        })?;
+        self.signed_post("/order", &body).await
+    }
+
+    /// Place a market sell order
+    pub async fn place_market_sell(&self, symbol: &str, size: f64) -> Result<OrderResult> {
+        let body = serde_json::to_string(&OrderRequest {
+            ty: "order".to_string(),
+            cls: "market".to_string(),
+            ord: OrderSpec {
+                ty: "mkt".to_string(),
+                sz: format!("{:.8}", size),
+                px: "".to_string(),
+                side: "Sell".to_string(),
                 sym: symbol.to_string(),
                 cloid: None,
             },

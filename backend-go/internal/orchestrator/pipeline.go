@@ -262,13 +262,20 @@ func (p *PipelineOrchestrator) executeTrade(sig *engines.PipelineSignal) {
 	if userCfg.DryRun {
 		positions := p.mem.GetPositions()
 		newPos := models.Position{
-			TokenAddress: sig.Metrics.Token,
-			EntryPrice:   sig.Metrics.PriceSOL,
-			EntryAmount:  sig.RecommendedSizeSOL,
-			AmountToken:  0,
-			EntryTime:    time.Now().UTC(),
-			HighestPrice: sig.Metrics.PriceSOL,
-			IsClosed:     false,
+			TokenAddress:    sig.Metrics.Token,
+			EntryPrice:      sig.Metrics.PriceSOL,
+			EntryAmount:     sig.RecommendedSizeSOL,
+			AmountToken:     0,
+			EntryTime:       time.Now().UTC(),
+			HighestPrice:    sig.Metrics.PriceSOL,
+			IsClosed:        false,
+			TakeProfitPct:   sig.LLMDynamicTakeProfit, // LLM dynamic TP
+			StopLossPct:     sig.LLMDynamicStopLoss,   // LLM dynamic SL
+			TrailingTPPct:   12.0,                      // default trailing
+			UseTrailing:     userCfg.TrailingTakeProfit,
+			LLMTPReason:     sig.LLMTPReason,
+			LLMSLReason:     sig.LLMSLReason,
+			LLMConfidence:   sig.LLMConfidence,
 		}
 		positions = append(positions, newPos)
 		p.mem.SavePositions(positions)
@@ -281,6 +288,8 @@ func (p *PipelineOrchestrator) executeTrade(sig *engines.PipelineSignal) {
 				"*Momentum:* %s (%.2f)\n"+
 				"*Regime:* %s\n"+
 				"*LLM:* %s (%.0f%%)\n"+
+				"*Dynamic TP:* %.1f%% %s\n"+
+				"*Dynamic SL:* %.1f%% %s\n"+
 				"⚠️ _No real transaction executed._",
 			sig.Metrics.Token,
 			sig.RecommendedSizeSOL,
@@ -288,6 +297,8 @@ func (p *PipelineOrchestrator) executeTrade(sig *engines.PipelineSignal) {
 			sig.MomentumDirection, sig.MomentumScore,
 			sig.MarketRegime,
 			sig.LLMDecision, sig.LLMConfidence*100,
+			sig.LLMDynamicTakeProfit, sig.LLMTPReason,
+			sig.LLMDynamicStopLoss, sig.LLMSLReason,
 		)
 		if err := p.notifier.SendMessage(msg); err != nil {
 			p.log.Error("Failed to send DRY RUN notification", zap.Error(err))
@@ -314,13 +325,20 @@ func (p *PipelineOrchestrator) executeTrade(sig *engines.PipelineSignal) {
 	// Record position
 	positions := p.mem.GetPositions()
 	newPos := models.Position{
-		TokenAddress: sig.Metrics.Token,
-		EntryPrice:   sig.Metrics.PriceSOL,
-		EntryAmount:  sig.RecommendedSizeSOL,
-		AmountToken:  0,
-		EntryTime:    time.Now().UTC(),
-		HighestPrice: sig.Metrics.PriceSOL,
-		IsClosed:     false,
+		TokenAddress:    sig.Metrics.Token,
+		EntryPrice:      sig.Metrics.PriceSOL,
+		EntryAmount:     sig.RecommendedSizeSOL,
+		AmountToken:     0,
+		EntryTime:       time.Now().UTC(),
+		HighestPrice:    sig.Metrics.PriceSOL,
+		IsClosed:        false,
+		TakeProfitPct:   sig.LLMDynamicTakeProfit, // LLM dynamic TP
+		StopLossPct:     sig.LLMDynamicStopLoss,   // LLM dynamic SL
+		TrailingTPPct:   12.0,                      // default trailing, LLM can override
+		UseTrailing:     userCfg.TrailingTakeProfit,
+		LLMTPReason:     sig.LLMTPReason,
+		LLMSLReason:     sig.LLMSLReason,
+		LLMConfidence:   sig.LLMConfidence,
 	}
 	positions = append(positions, newPos)
 	p.mem.SavePositions(positions)
@@ -336,11 +354,15 @@ func (p *PipelineOrchestrator) executeTrade(sig *engines.PipelineSignal) {
 			"*Size:* %.4f SOL\n"+
 			"*Confidence:* %.0f%%\n"+
 			"*LLM:* %s\n"+
+			"*Dynamic TP:* %.1f%% %s\n"+
+			"*Dynamic SL:* %.1f%% %s\n"+
 			"*TxHash:* `%s`",
 		sig.Metrics.Token,
 		sig.RecommendedSizeSOL,
 		sig.ConfidenceScore*100,
 		sig.LLMDecision,
+		sig.LLMDynamicTakeProfit, sig.LLMTPReason,
+		sig.LLMDynamicStopLoss, sig.LLMSLReason,
 		txHash,
 	)
 	if err := p.notifier.SendMessage(msg); err != nil {

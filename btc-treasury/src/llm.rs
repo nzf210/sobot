@@ -34,6 +34,14 @@ struct AdvisoryJson {
     warnings: Vec<String>,
     market_regime: String,
     opportunity_score: f64,
+    #[serde(default)]
+    dynamic_take_profit: f64,
+    #[serde(default)]
+    dynamic_stop_loss: f64,
+    #[serde(default)]
+    tp_reason: String,
+    #[serde(default)]
+    sl_reason: String,
 }
 
 impl LlmClient {
@@ -92,6 +100,10 @@ impl LlmClient {
             opportunity_score: result.opportunity_score,
             bypass_quant: true,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            dynamic_take_profit: result.dynamic_take_profit,
+            dynamic_stop_loss: result.dynamic_stop_loss,
+            tp_reason: result.tp_reason,
+            sl_reason: result.sl_reason,
         })
     }
 }

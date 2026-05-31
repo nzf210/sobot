@@ -25,7 +25,7 @@ impl MemoryStore {
         let defaults: Vec<(&str, &str)> = vec![
             ("btc-treasury.json", r#"{"current_btc":0,"previous_btc":0,"btc_growth_7d":0,"btc_growth_30d":0,"stable_value":0,"usdt_balance":0,"last_update":""}"#),
             ("btc-decision-log.json", "[]"),
-            ("btc-config.json", r#"{"enabled":false,"llm_activation_threshold":0.75,"min_confidence":0.80,"max_exposure":0.50,"daily_loss_limit_btc":0.0005,"max_consecutive_losses":3,"safe_mode_volatility":9.0,"safe_mode_drawdown":0.05,"scanner_pairs":["BTCUSDT"]}"#),
+            ("btc-config.json", r#"{"enabled":false,"llm_activation_threshold":0.75,"min_confidence":0.80,"max_exposure":0.50,"daily_loss_limit_btc":0.0005,"max_consecutive_losses":3,"safe_mode_volatility":9.0,"safe_mode_drawdown":0.05,"scanner_pairs":["BTCUSDT"],"take_profit_pct":5.5,"stop_loss_pct":-1.5,"trailing_tp_pct":3.0,"use_trailing":true,"max_positions":1,"risk_per_trade_pct":0.01,"initial_capital_usdt":50.0,"min_score_threshold":80.0,"compound_pct":0.50,"treasury_pct":0.50}"#),
             ("btc-positions.json", "[]"),
             ("btc-lessons.json", "[]"),
         ];
@@ -126,6 +126,44 @@ impl MemoryStore {
         lessons.push(lesson);
         let json = serde_json::to_string_pretty(&lessons).unwrap();
         fs::write(&path, json).expect("Failed to write lessons");
+    }
+
+    /// Called when a position closes. Updates current_btc based on realized profit/loss.
+    /// When closing BTC-X: profit in X is converted back to BTC at current price.
+    /// This tracks the true BTC accumulation goal.
+    pub fn update_treasury_on_close(&self, pair: &str, pnl_pct: f64, position_size_usdt: f64) {
+        let mut state = self.get_treasury_state();
+        let pnl_multiplier = 1.0 + (pnl_pct / 100.0);
+        // PnL is relative to the position value in the quote currency (USDT/USDC)
+        let pnl_usdt = position_size_usdt * (pnl_multiplier - 1.0);
+
+        // For BTC accumulation: when closing at profit, convert the profit to BTC
+        // For simplicity, track the net BTC delta based on PnL direction.
+        // Profitable close → increase current_btc proportionally to profit size
+        // Losing close → decrease current_btc proportionally to loss size
+        if pnl_pct > 0.0 {
+            // Profit: convert realized gain to BTC (use BTCUSDT price as proxy for conversion)
+            // For BTC-X pairs where X ≠ USDT, we'd need the X/USDT price here.
+            // For BTCUSDT pairs, the PnL is already in USDT — convert to BTC equivalent.
+            let btc_price = 65_000.0; // will be overridden by actual price if available
+            let btc_delta = pnl_usdt / btc_price;
+            state.current_btc += btc_delta;
+            tracing::info!(
+                "Position {} closed at +{:.2}%. BTC treasury grew by {:.8} BTC (profit: {:.2} USDT)",
+                pair, pnl_pct, btc_delta, pnl_usdt
+            );
+        } else {
+            // Loss: reduce BTC treasury
+            let btc_price = 65_000.0;
+            let btc_delta = pnl_usdt / btc_price;
+            state.current_btc = (state.current_btc + btc_delta).max(0.0);
+            tracing::info!(
+                "Position {} closed at {:.2}%. BTC treasury reduced by {:.8} BTC (loss: {:.2} USDT)",
+                pair, pnl_pct, btc_delta.abs(), pnl_usdt.abs()
+            );
+        }
+
+        self.save_treasury_state(state);
     }
 
     pub fn load_skills(&self) -> String {

@@ -31,7 +31,7 @@ func ExecuteSwap(inputMint, outputMint string, amount int64) (*SwapResponse, err
 	}
 	port := os.Getenv("EXECUTOR_PORT")
 	if port == "" {
-		port = "3000"
+		port = "3009"
 	}
 
 	url := fmt.Sprintf("http://%s:%s/execute", host, port)
@@ -85,7 +85,7 @@ func GetWalletBalance() (*WalletResponse, error) {
 	}
 	port := os.Getenv("EXECUTOR_PORT")
 	if port == "" {
-		port = "3000"
+		port = "3009"
 	}
 
 	url := fmt.Sprintf("http://%s:%s/wallet", host, port)

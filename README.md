@@ -1,69 +1,52 @@
-# Solana Hybrid DLMM + Sniper + LLM System
+# Solana Hybrid System
 
-Production-oriented hybrid architecture:
+Production-ready hybrid trading system untuk Solana token sniper dengan BTC treasury advisory.
 
-- Go orchestration layer
-- TypeScript Solana execution layer
-- Risk engine
-- Rule engine
-- Historical memory
-- LLM reasoning pipeline
-- DLMM automation
-- Momentum sniper
-- Structured telemetry
+## Documentation
 
-## Stack
+| Document | Description |
+|----------|-------------|
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | VPS deployment guide |
+| [HYPERLIQUID.md](docs/HYPERLIQUID.md) | HyperLiquid integration guide |
+| [PARAMETERS.md](docs/PARAMETERS.md) | All configuration parameters |
+| [docs/architecture.md](docs/architecture.md) | System architecture |
 
-### Backend
-- Go
-- Gin
-- SQLite
-- Zap Logger
-
-### Executor
-- TypeScript
-- Solana Web3.js
-- Jupiter SDK
-- Meteora SDK (stub)
-- Anchor
-
-## Configuration
-
-Before running the application, you need to set up your environment variables. A sample file is provided.
+## Quick Start
 
 ```bash
+# 1. Configure environment
 cp .env.sample .env
-```
+# Edit .env with your API keys
 
-Update the `.env` file with your Solana RPC URL, wallet password, LLM API keys, and database paths.
-
-### Generating a Secure Wallet
-
-Instead of storing raw private keys in `.env`, we use an encrypted wallet file (`wallet.enc`).
-
-To generate a new wallet or encrypt an existing private key:
-```bash
+# 2. Generate encrypted wallet
 cd executor-ts
 npm run generate-wallet
-```
-This script will prompt you for a base58 private key (or generate a new one if left blank) and a password to encrypt it. Ensure the `WALLET_PASSWORD` in your `.env` matches the password you provide here.
+cd ..
 
-Additional business logic configurations (like liquidity and positions limits) can be found in `configs/default.json`.
+# 3. Start services
+docker compose up -d
 
-## Run
-
-### Go Backend
-
-```bash
-cd backend-go
-go mod tidy
-go run ./cmd/main.go
+# 4. Verify
+curl http://localhost:8089/health
 ```
 
-### TS Executor
+## Services
 
-```bash
-cd executor-ts
-npm install
-npm run dev
-```
+| Service | Port | Language | Purpose |
+|---------|------|----------|---------|
+| backend-go | 8089 | Go | Pipeline orchestrator, Telegram bot |
+| executor-ts | 3009 | TypeScript | Jupiter swap execution |
+| btc-treasury | 8090 | Rust | BTC treasury advisory |
+
+## Safety
+
+**Default settings are SAFE for production:**
+- `dryRun: true` — No real trades
+- `autoTrade: false` — Manual approval required
+- Strong API keys enforced
+
+## Quick Links
+
+- [Deployment Guide](docs/DEPLOYMENT.md)
+- [HyperLiquid Setup](docs/HYPERLIQUID.md)
+- [Configuration Reference](docs/PARAMETERS.md)

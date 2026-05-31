@@ -59,7 +59,7 @@ fn format_report(
 ) -> String {
     let mut lines: Vec<String> = Vec::new();
 
-    lines.push("*BTC Scan Report*\n".into());
+    lines.push("*BTC Scan Report — Binance Spot*\n".into());
 
     let total_scanned: u64 = snapshots.iter().map(|s| s.stats.scanned).sum();
     let total_errors: u64 = snapshots.iter().map(|s| s.stats.errors).sum();

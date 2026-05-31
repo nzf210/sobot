@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
     "generate-wallet": "tsx src/scripts/generate-wallet.ts"
   },
   "dependencies": {

@@ -65,6 +65,10 @@ type PipelineSignal struct {
 	LLMConfidence          float64 `json:"llm_confidence"`
 	LLMNarrativeScore      float64 `json:"llm_narrative_score"`
 	LLMDLMMSuitability     float64 `json:"llm_dlmm_suitability"`
+	LLMDynamicTakeProfit   float64 `json:"llm_dynamic_take_profit"`   // dynamic TP % (e.g. 25.5)
+	LLMDynamicStopLoss    float64 `json:"llm_dynamic_stop_loss"`    // dynamic SL % (e.g. -8.5)
+	LLMTPReason           string  `json:"llm_tp_reason"`            // why LLM set this TP
+	LLMSLReason           string  `json:"llm_sl_reason"`           // why LLM set this SL
 
 	// ── Pipeline flags ────────────────────────────────────────────────────
 	RejectedBy             string  `json:"rejected_by,omitempty"` // which engine rejected it

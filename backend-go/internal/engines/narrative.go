@@ -34,11 +34,15 @@ func NewLLMNarrativeAnalysis(url, model, apiKey string, mem *memory.MemoryStore,
 
 // LLMResult contains the parsed LLM output.
 type LLMResult struct {
-	Decision        string  `json:"decision"`
-	Confidence      float64 `json:"confidence"`
-	NarrativeScore  float64 `json:"narrative_score"`
-	DLMMSuitability float64 `json:"dlmm_suitability"`
-	Reasoning       string  `json:"reasoning"`
+	Decision string  `json:"decision"`
+	Confidence        float64 `json:"confidence"`
+	NarrativeScore    float64 `json:"narrative_score"`
+	DLMMSuitability  float64 `json:"dlmm_suitability"`
+	Reasoning        string  `json:"reasoning"`
+	DynamicTakeProfit float64 `json:"dynamic_take_profit"` // dynamic TP % (e.g. 25.5 means25.5%)
+	DynamicStopLoss  float64 `json:"dynamic_stop_loss"` // dynamic SL % (e.g. -8.5 means -8.5%)
+	TPReason         string  `json:"tp_reason"`
+	SLReason         string  `json:"sl_reason"`
 }
 
 // Analyze sends enriched pipeline signal to LLM and returns result.
@@ -55,6 +59,8 @@ func (a *LLMNarrativeAnalysis) Analyze(sig *PipelineSignal) {
 			Confidence:      0.5,
 			NarrativeScore:  0.5,
 			DLMMSuitability: 0.3,
+			DynamicTakeProfit: 20.0, // fallback default
+			DynamicStopLoss:  -10.0, // fallback default
 			Reasoning:       "LLM unavailable, using heuristic fallback",
 		}
 	}
@@ -63,6 +69,10 @@ func (a *LLMNarrativeAnalysis) Analyze(sig *PipelineSignal) {
 	sig.LLMConfidence = result.Confidence
 	sig.LLMNarrativeScore = result.NarrativeScore
 	sig.LLMDLMMSuitability = result.DLMMSuitability
+	sig.LLMDynamicTakeProfit = result.DynamicTakeProfit
+	sig.LLMDynamicStopLoss = result.DynamicStopLoss
+	sig.LLMTPReason = result.TPReason
+	sig.LLMSLReason = result.SLReason
 }
 
 func (a *LLMNarrativeAnalysis) buildPrompt(sig *PipelineSignal, ctx string) string {
@@ -74,6 +84,10 @@ func (a *LLMNarrativeAnalysis) buildPrompt(sig *PipelineSignal, ctx string) stri
   "confidence": "number between 0 and 1",
   "narrative_score": "number between 0 and 1",
   "dlmm_suitability": "number between 0 and 1",
+  "dynamic_take_profit": "number (e.g. 25.5 means 25.5%% take profit target)",
+  "dynamic_stop_loss": "number (e.g. -8.5 means -8.5%% stop loss)",
+  "tp_reason": "string (brief reason why this TP was chosen)",
+  "sl_reason": "string (brief reason why this SL was chosen)",
   "reasoning": "string (brief explanation)"
 }
 

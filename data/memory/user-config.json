@@ -1,7 +1,7 @@
 {
-  "autoTrade": true,
+  "autoTrade": false,
   "dailyLossLimitUsd": 2,
-  "dryRun": false,
+  "dryRun": true,
   "llmTemperature": 0.2,
   "maxConsecutiveLosses": 3,
   "maxDeployAmountSol": 0.03,

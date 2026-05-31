@@ -48,5 +48,11 @@ Stores the runtime switches, such as `auto_trade`, `risk_tolerance`, and global 
 
 ## Future / Planned Capabilities
 
-### Auto-Sell & Position Management (Take Profit / Stop Loss)
-- *In Development:* A position tracker that monitors tokens bought by the Executor and automatically triggers a sell when reaching a +20% Take Profit or -10% Stop Loss.
+### Auto-Sell & Position Management (Dynamic TP / SL / Trailing Stop)
+Fully implemented in `internal/manager/manager.go` and `internal/telegram/bot.go`.
+- **Take Profit:** Closes position when price rises ≥ TP threshold from entry
+- **Stop Loss:** Closes position when price drops ≥ SL threshold from entry
+- **Trailing Stop:** Tracks highest price; triggers when price drops X% from peak. Trail % adjusts dynamically based on momentum: Low=10%, Medium=12%, High=15%, Extreme=20%.
+- **Per-position override:** LLM sets TP/SL per token via `dynamic_take_profit` / `dynamic_stop_loss` fields; falls back to global config if not set
+- **Config fields:** `take_profit_pct`, `stop_loss_pct`, `trailing_tp_pct`, `use_trailing`
+- **Monitor cycle:** Every 10 seconds via `PositionManager::start()` goroutine

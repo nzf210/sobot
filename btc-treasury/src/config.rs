@@ -57,7 +57,7 @@ impl AppConfig {
             exchange_base_url: env_str("EXCHANGE_BASE_URL", "https://api.binance.com"),
             wallet_password: std::env::var("WALLET_PASSWORD").unwrap_or_default(),
             hyperliquid_key_path: env_str("HYPERLIQUID_KEY_PATH", "../hyperliquid.enc"),
-            scanner_interval_secs: env_u64("BTC_SCANNER_INTERVAL_SECS", 30),
+            scanner_interval_secs: env_u64("BTC_SCANNER_INTERVAL_SECS", 900),
             report_interval_mins: env_u64("BTC_REPORT_INTERVAL_MINS", 5),
             scanner_pairs: env_pairs("BTC_SCANNER_PAIRS", "BTCUSDT"),
         }

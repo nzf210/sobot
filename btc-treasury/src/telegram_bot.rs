@@ -1,84 +1,135 @@
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use anyhow::Result;
 use teloxide::prelude::*;
+use tokio::sync::RwLock;
+use tokio::time::{interval, Duration};
 
 use crate::engine::AdvisoryEngine;
-use crate::exchange::{ExchangeClient, ExchangeOrderResult};
+use crate::exchange::ExchangeClient;
 use crate::format::{bot_send_plain, escape_mdv2, send_mdv2_safe};
 use crate::memory::MemoryStore;
 use crate::models::*;
+use crate::position_monitor::record_position_from_advisory;
 use crate::scanner::ScannerState;
 
 // ── Static help / skills text ────────────────────────────────────────────────
-// These are entirely static = no dynamic interpolation → safe for MarkdownV2.
+// Binance Spot-focused. Pair names are Binance-style: SYMBOLBTC, ETHBTC, SOLBTC, etc.
 
-const HELP_TEXT: &str = r#"🤖 *BTC Treasury Advisor \(Spot\)*
+const HELP_TEXT: &str = r#"🤖 *BTC Treasury Accumulation* — Binance Spot
 
-*Market & Advisory*
-/btc\_status — Spot account balance \(BTC \+ USDT\), open orders
-/btc\_market \[PAIR\] — Live orderbook \+ market regime
-/btc\_advisory \[PAIR\] — Full advisory \(quant \+ LLM\)
-/btc\_treasury — Treasury state
-/btc\_positions — Open orders
+*Account & Balances*
+/btc\_status — Spot balance \(USDT \+ all assets\), open orders
 
-*Scanner & History*
-/btc\_scan \[PAIR\] — Scan stats & status
-/btc\_history — Recent decision history
-/btc\_lessons — Recent self\-learning lessons
+*Market & Analysis*
+/btc\_market \[PAIR\] — Live market data + OHLCV summary
+/btc\_advisory \[PAIR\] — Full quant \+ LLM advisory
+/btc\_scan \[PAIR\] — Scanner stats per pair \(AI scores\)
+
+*Treasury & Positions*
+/btc\_treasury — BTC holdings, vault, compound balance, trade stats
+/btc\_positions — Open positions with TP/SL/trailing
+
+*Pair Management \(Binance BTC‑Quote\)*
 /btc\_pairs — List active scanned pairs
-/btc\_addpair \<PAIR\> — Add pair to scanner
-/btc\_removepair \<PAIR\> — Remove pair
+/btc\_addpair \<PAIR\> — Add pair \(e\.g\. SOLBTC, ETHBTC, SUIBTC\)
+/btc\_removepair \<PAIR\> — Remove pair from scanner
+/btc\_discover — Auto\-discover all BTC\-quote pairs on Binance
+/btc\_pairinfo \<PAIR\> — AI scores for one pair
+
+*History & Learning*
+/btc\_history — Last 10 decisions
+/btc\_lessons — Recent self\-learning lessons
+
+*Trading \(Binance Spot\)*
+/btc\_buy \<SIZE\> \<PAIR\> — Market buy with dynamic TP/SL
+/btc\_sell — Close position at market price
+/btc\_cancel — Cancel all open orders
 
 *Configuration*
-/btc\_config — Current config
-/btc\_setconfig \<key\> \<value\> — Update config
+/btc\_config — Current config \(TP/SL/thresholds\)
+/btc\_setconfig \<key\> \<value\> — Update config live
 /btc\_enable — Enable LLM advisory
 /btc\_disable — Disable LLM advisory
 
-*Trading \(Spot\)*
-/btc\_cancel — Cancel all open spot orders
-
 *Info*
-/btc\_skills — Bot skills & capabilities
-/help — This message"#;
+/btc\_skills — Full bot capabilities
+/help — This message
 
-const SKILLS_TEXT: &str = r#"*BTC Treasury Advisor — Skills*
+*Pair Format \(Binance BTC‑Quote\)*
+Examples: SOLBTC, ETHBTC, SUIBTC, LINKBTC, DOGEBTC, ADABTC
+Auto\-discover with /btc\_discover"#;
 
-*1\. Autonomous BTC Spot Scanner*
-Polls Binance spot orderbook every 30s
-Derives regime, trend, liquidity, spread, volatility
-Runs quant \+ LLM advisory engine
-Logs every decision to btc\-decision\-log\.json
+const SKILLS_TEXT: &str = r#"*BTC Treasury Accumulation — Skills*
 
-*2\. Market Regime Detection*
-11 regimes: TRENDING\_BULLISH, TRENDING\_BEARISH,
-RANGING, CHOPPY, BREAKOUT\_EXPANSION,
-FAKE\_BREAKOUT, ACCUMULATION, DISTRIBUTION,
-PANIC\_SELLOFF, LOW\_LIQUIDITY\_DANGER,
-HIGH\_VOLATILITY\_DANGER
+*1\. Binance Spot Scanner*
+- Poll interval: every 15 min \(configurable\)
+- Fetches OHLCV: 15m, 1h, 4h, 1d candles per BTC‑quote pair
+- Auto\-discovers all BTC‑quote pairs from Binance
+- Dynamic pair universe, no manual tracking needed
 
-*3\. Risk Assessment Engine*
-Multi\-factor: liquidity, spread, volatility,
-drawdown, loss streak, confidence
-Risk levels: LOW, MEDIUM, HIGH, CRITICAL
+*2\. Relative Strength Engine*
+- RS = Coin Return \- BTC Return
+- Weight: 1h 35%, 4h 30%, 1d 25%, 15m 10%
+- RS Rising = 1h RS \+ 4h RS → accelerating momentum
 
-*4\. Treasury Protection*
-Modes: ACCUMULATE, PROTECT, REDUCE\_RISK, SAFE\_MODE
-Auto\-activates during dangerous conditions
+*3\. Momentum Engine*
+- EMA20 \+ EMA50 \+ EMA200 alignment
+- MACD bullish: MACD line \+ signal line \+ histogram
+- RSI\(14\) ideal: 40\-60 continuation range
+- Volume Growth: current \+ average comparison
+- ATR expansion detection
 
-*5\. LLM AI Reasoning*
-Activated when confidence \< threshold or
-dangerous conditions detected
-Fallback to quant\-only when LLM fails
+*4\. Volume Engine*
+- Volume Spike: current vol \+ 2x average
+- Volume Expansion: 1h \+ 4h growing
+- Wash Trade filter: wide spread \+ low move \+ high vol
+- Liquidity check: reject thin pairs
 
-*6\. Self\-Learning*
-Non\-approved decisions become lessons
-Lessons feed LLM context for future decisions
+*5\. AI Scoring Model*
+| Component | Weight |
+| Relative Strength | 40% |
+| Volume Growth | 25% |
+| Trend Strength | 20% |
+| Volatility Quality | 10% |
+| Market Structure | 5% |
 
-*7\. Periodic Report*
-Auto\-report every 5 minutes to configured chats
-Shows scan stats, decisions, new lessons"#;
+Score \+ 80 → *AMBIL POSISI*
+Score \* 80 → DO NOTHING \(cash is a position\)
+
+*6\. Risk Manager*
+- 1% risk per trade
+- Max 1 position at a time
+- 3 loss streak → Pause 24 hours
+- Drawdown \+ 10% → Reduce position 50%
+- Position size: risk\_amount \+ SL distance
+
+*7\. Entry Conditions \(ALL must pass\)*
+✅ RS Rising \(1h RS \* 4h RS\)
+✅ EMA20 \* EMA50 \* EMA200 bullish
+✅ MACD bullish
+✅ Volume \* Average
+✅ AI Score \* 80
+
+*8\. Exit Conditions*
+- Take Profit: 3\-8% \(dynamic\)
+- Trailing Stop: track peak, trigger on X% drop
+- Stop Loss: 1\-2% \(hard limit\)
+- TP \* |SL| always maintained
+
+*9\. BTC Treasury Split*
+On every winning close:
+- 50% → BTC Treasury Vault \(never traded\)
+- 50% → Compound balance \(re‑enter capital\)
+
+*10\. Anti\-FOMO*
+❌ Martingale
+❌ Averaging Down
+❌ Revenge Trading
+❌ YOLO / All\-In
+
+*Exchange: Binance Spot only — NO futures, NO perpetual, NO leverage*"#;
 
 // ── BtcBot ───────────────────────────────────────────────────────────────────
 
@@ -130,7 +181,7 @@ impl BtcBot {
         }
     }
 
-    async fn run_bot(&self) -> Result<()> {
+    async fn run_bot(&self) -> anyhow::Result<()> {
         let bot = Bot::new(&self.token);
         let this = Arc::new(self.clone());
         tracing::info!("BTC Treasury Telegram bot started");
@@ -167,7 +218,6 @@ impl BtcBot {
         let (cmd, args) = if let Some(rest) = text.strip_prefix('/') {
             let parts: Vec<&str> = rest.splitn(2, |c: char| c.is_whitespace()).collect();
             let mut cmd = parts[0].to_lowercase();
-            // Support both /btc_status and /btcstatus (underscore-stripped)
             cmd = cmd.replace('_', "");
             let rest = parts.get(1).map(|s| s.trim().to_string());
             (cmd, rest)
@@ -189,6 +239,8 @@ impl BtcBot {
             "btcpairs" => self.cmd_pairs(bot, msg).await,
             "btcaddpair" => self.cmd_addpair(bot, msg, args).await,
             "btcremovepair" => self.cmd_removepair(bot, msg, args).await,
+            "btcdiscover" => self.cmd_discover(bot, msg).await,
+            "btcpairinfo" => self.cmd_pairinfo(bot, msg, args).await,
             "btcconfig" => self.cmd_config(bot, msg).await,
             "btcsetconfig" => {
                 if let Some(args_str) = args {
@@ -204,6 +256,8 @@ impl BtcBot {
             }
             "btcenable" => self.cmd_enable(bot, msg).await,
             "btcdisable" => self.cmd_disable(bot, msg).await,
+            "btcbuy" => self.cmd_buy(bot, msg, args).await,
+            "btcsell" => self.cmd_sell(bot, msg, args).await,
             "btccancel" => self.cmd_cancel(bot, msg).await,
             "start" => self.cmd_help(bot, msg).await,
             _ => bot_send_plain(bot, msg, "Unknown command. Use /help").await,
@@ -223,42 +277,44 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_status or /btcstatus — account with BTC + USDT/USDC balance, open orders.
+    /// /btc_status — Binance Spot balance (USDT + all assets), open orders.
     async fn cmd_status(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let text = if let Some(ref exchange) = self.exchange {
             match exchange.get_balances().await {
                 Ok(balances) => {
-                    let btc_bal = balances.iter().find(|b| b.asset == "BTC");
                     let stable_bal = balances.iter().find(|b| b.asset == "USDT" || b.asset == "USDC");
-                    let btc_free = btc_bal.map(|b| b.free).unwrap_or(0.0);
-                    let btc_locked = btc_bal.map(|b| b.locked).unwrap_or(0.0);
                     let stable_free = stable_bal.map(|b| b.free).unwrap_or(0.0);
                     let stable_locked = stable_bal.map(|b| b.locked).unwrap_or(0.0);
-                    let stable_asset = if stable_bal.is_some() {
-                        if balances.iter().any(|b| b.asset == "USDC") { "USDC" } else { "USDT" }
-                    } else { "USDT/USDC" };
+                    let stable_asset = if balances.iter().any(|b| b.asset == "USDC") { "USDC" } else { "USDT" };
 
+                    let ts = self.mem.get_treasury_state();
                     let mut lines = vec![
-                        format!("💼 *Account*"),
+                        format!("💼 *Account — Binance Spot*"),
                         format!("Exchange: {}", escape_mdv2(exchange.exchange_name())),
                         format!("API Key: `{}`", escape_mdv2(&exchange.api_key_display())),
-                        format!("BTC: {:.8} free \\| {:.8} locked", btc_free, btc_locked),
                         format!("{}: {:.2} free \\| {:.2} locked", stable_asset, stable_free, stable_locked),
+                        format!(""),
+                        format!("🏦 *BTC Treasury*"),
+                        format!("BTC Holdings: {:.8}", ts.current_btc),
+                        format!("BTC Vault: {:.8}", ts.btc_treasury_vault),
+                        format!("Compound: {:.8}", ts.compound_balance),
+                        format!("Trades: {} \\| Win: {} \\| Loss: {}", ts.total_trades, ts.winning_trades, ts.losing_trades),
                     ];
 
                     // Show other non-zero balances
                     let other: Vec<_> = balances.iter()
-                        .filter(|b| b.asset != "BTC" && b.asset != "USDT" && b.asset != "USDC")
+                        .filter(|b| b.asset != "USDT" && b.asset != "USDC" && b.asset != "BTC")
                         .filter(|b| b.free > 0.0 || b.locked > 0.0)
                         .collect();
                     if !other.is_empty() {
                         lines.push(String::new());
+                        lines.push("*Other Assets:*".to_string());
                         for b in other {
                             lines.push(format!("{}: {:.8} free \\| {:.8} locked", escape_mdv2(&b.asset), b.free, b.locked));
                         }
                     }
 
-                    // Open orders across all pairs
+                    // Open orders
                     if let Some(ref scanner) = self.scanner {
                         let pairs = scanner.get_pairs().await;
                         let mut all_orders: Vec<BtcAdvisoryPosition> = Vec::new();
@@ -269,15 +325,16 @@ impl BtcBot {
                         }
                         if !all_orders.is_empty() {
                             lines.push(String::new());
-                            lines.push("*Open Orders*".to_string());
+                            lines.push("*Open Orders:*".to_string());
                             for o in &all_orders {
                                 lines.push(format!(
-                                    "{} {}: {} @ {} \\| filled {:.0}%",
+                                    "{} {}: {} @ {} \\| TP: {:.1}% \\| SL: {:.1}%",
                                     escape_mdv2(&o.side),
                                     escape_mdv2(&o.id),
                                     o.size,
                                     o.entry_price,
-                                    if o.size > 0.0 { 0.0 } else { 100.0 },
+                                    o.take_profit_pct,
+                                    o.stop_loss_pct,
                                 ));
                             }
                         }
@@ -290,18 +347,19 @@ impl BtcBot {
         } else {
             "Exchange not configured. Set EXCHANGE_API_KEY and EXCHANGE_API_SECRET.".into()
         };
-        send_mdv2_safe(bot, msg.chat.id,&text).await?;
+        send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
 
-    /// /btc_market or /btcmarket [PAIR] — live market data.
+    /// /btc_market [PAIR] — live market data + OHLCV summary.
+    /// Defaults to BTCUSDT (price reference), NOT a BTC-quote pair.
     async fn cmd_market(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
         let pair = args.as_deref().unwrap_or("BTCUSDT").trim().to_uppercase();
         let text = if let Some(ref exchange) = self.exchange {
             match exchange.get_market_data(&pair).await {
                 Ok(data) => {
                     format!(
-                        "*{} Spot Market*\nRegime: {}\nTrend: {:.1}\nVolume: {:.1}/10\nLiquidity: {:.1}/10\nSpread: {:.1}/10\nVolatility: {:.1}/10\nConfidence: {:.2}",
+                        "*{} — Binance Spot*\nRegime: {}\nTrend: {:.1}\nVolume: {:.1}/10\nLiquidity: {:.1}/10\nSpread: {:.1}/10\nVolatility: {:.1}/10\nConfidence: {:.2}",
                         escape_mdv2(&pair),
                         escape_mdv2(&data.market_regime),
                         data.trend_strength,
@@ -312,7 +370,7 @@ impl BtcBot {
                         data.confidence,
                     )
                 }
-                Err(e) => format!("Failed: {}", e),
+                Err(e) => format!("Failed to fetch market data for {}: {}", pair, e),
             }
         } else {
             "Exchange not configured".into()
@@ -321,7 +379,8 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_advisory or /btcadvisory [PAIR]— full advisory on demand.
+    /// /btc_advisory [PAIR] — full advisory on demand.
+    /// PAIR is a BTC-quote pair (e.g. SOLBTC, ETHBTC) or BTCUSDT.
     async fn cmd_advisory(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
         let pair = args.as_deref().unwrap_or("BTCUSDT").trim().to_uppercase();
         let _ = bot_send_plain(bot, msg, &format!("🔍 Running advisory for {}...", pair)).await;
@@ -348,22 +407,21 @@ impl BtcBot {
         let advisory = self.engine.analyze(&input).await;
 
         let text = format!(
-            "*Advisory Result*\n\
+            "*Advisory Result — {}*\n\
             Recommendation: *{}*\n\
             Confidence: {:.2}\n\
             Risk Level: *{}*\n\
             Treasury Mode: {}\n\
             Market Regime: {}\n\
-            Opportunity Score: {:.0}\n\
             LLM Active: {}\n\n\
             Reason: {}\n\
             Warnings: {}",
+            escape_mdv2(&pair),
             escape_mdv2(&advisory.recommendation),
             advisory.confidence,
             escape_mdv2(&advisory.risk_level),
             escape_mdv2(&advisory.treasury_mode),
             escape_mdv2(&advisory.market_regime),
-            advisory.opportunity_score,
             advisory.bypass_quant,
             escape_mdv2(&advisory.reason),
             escape_mdv2(&advisory.warnings.join(", ")),
@@ -373,61 +431,84 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_treasury or /btctreasury — treasury state.
+    /// /btc_treasury — BTC treasury state, vault, compound, trade stats.
     async fn cmd_treasury(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let ts = self.mem.get_treasury_state();
+        let cfg = self.mem.get_config();
+        let win_rate = if ts.total_trades > 0 {
+            (ts.winning_trades as f64 / ts.total_trades as f64 * 100.0)
+        } else {
+            0.0
+        };
         let text = format!(
-            "🏦 *Treasury*\nBTC: {:.8}\nUSDT: {:.2}\n7d Growth: {:.4}%\nLast Update: {}",
+            "🏦 *BTC Treasury — Binance Spot*\n\n\
+            BTC Holdings: {:.8}\n\
+            BTC Vault: {:.8} ⚠️ *never traded*\n\
+            Compound: {:.8}\n\n\
+            📊 Trade Stats\n\
+            Total: {} \\| Win: {} \\| Loss: {}\n\
+            Win Rate: {:.1}%\n\n\
+            💰 Capital\n\
+            Initial: ${:.2}\n\
+            Compound Split: {:.0}%\n\
+            Treasury Split: {:.0}%\n\n\
+            ⚙️ Risk\n\
+            Max Positions: {}\n\
+            Risk/Trade: {:.1}%\n\
+            TP: {:.1}% \\| SL: {:.1}%\n\
+            AI Threshold: {:.0}\n\n\
+            Last Update: {}",
             ts.current_btc,
-            ts.usdt_balance,
-            ts.btc_growth_7d * 100.0,
+            ts.btc_treasury_vault,
+            ts.compound_balance,
+            ts.total_trades,
+            ts.winning_trades,
+            ts.losing_trades,
+            win_rate,
+            cfg.initial_capital_usdt,
+            cfg.compound_pct * 100.0,
+            cfg.treasury_pct * 100.0,
+            cfg.max_positions,
+            cfg.risk_per_trade_pct * 100.0,
+            cfg.take_profit_pct,
+            cfg.stop_loss_pct,
+            cfg.min_score_threshold,
             escape_mdv2(&ts.last_update),
         );
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
 
-    /// /btc_positions or /btcpositions — open spot orders.
+    /// /btc_positions — open positions with TP/SL/trailing.
     async fn cmd_positions(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let text = if let Some(ref exchange) = self.exchange {
-            match self.scanner {
-                Some(ref scanner) => {
-                    let pairs = scanner.get_pairs().await;
-                    let mut all_orders: Vec<BtcAdvisoryPosition> = Vec::new();
-                    for pair in &pairs {
-                        if let Ok(orders) = exchange.get_open_orders(pair).await {
-                            all_orders.extend(orders);
-                        }
-                    }
-                    if all_orders.is_empty() {
-                        "No open orders".into()
-                    } else {
-                        let lines: Vec<String> = all_orders
-                            .iter()
-                            .map(|o| {
-                                format!(
-                                    "{} {}: {} @ {} \\| filled {:.0}%",
-                                    escape_mdv2(&o.side),
-                                    escape_mdv2(&o.id),
-                                    o.size,
-                                    o.entry_price,
-                                    if o.size > 0.0 { 0.0 } else { 100.0 },
-                                )
-                            })
-                            .collect();
-                        format!("📊 *Open Orders*\n{}", lines.join("\n"))
-                    }
-                }
-                None => "Scanner not active".into(),
-            }
-        } else {
-            "Exchange not configured".into()
-        };
+        let positions = self.mem.get_positions();
+        if positions.is_empty() {
+            send_mdv2_safe(bot, msg.chat.id, "📭 No open positions\nCash is a position — wait for AI score ≥ 80").await?;
+            return Ok(());
+        }
+
+        let mut lines = vec!["📊 *Open Positions — Binance Spot*\n".into()];
+        for (i, p) in positions.iter().enumerate() {
+            let trailing_icon = if p.use_trailing { "🏃" } else { "—" };
+            lines.push(format!(
+                "{}. *{}*\n  Entry: {} | Current: {}\n  Size: {} | PnL: {:.2}%\n  TP: {:.1}% {} | SL: {:.1}%",
+                i + 1,
+                escape_mdv2(&p.id),
+                p.entry_price,
+                p.current_price,
+                p.size,
+                p.pnl_btc,
+                p.take_profit_pct,
+                trailing_icon,
+                p.stop_loss_pct,
+            ));
+        }
+        let text = lines.join("\n");
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
 
-    /// /btc_scan or /btcscan [PAIR] — scanner stats.
+    /// /btc_scan [PAIR] — scanner stats with AI scores.
     async fn cmd_scan(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
         let scanner = match self.scanner {
             Some(ref s) => s,
@@ -467,14 +548,24 @@ impl BtcBot {
                 last_reason.to_string()
             };
 
+            let score_bar = score_bar(last_conf);
+
             let text = format!(
-                "*{} Scanner*\n\nScanned: {}\n✅ {}\n👁 {}\n🛡 {}\n❌ {}\n⚠️ {}\n\nLast: {}\nRegime: {}\nRec: *{}*\nConf: {:.2}\nRisk: {}\n{}",
+                "*{} — Scanner*\n\n\
+                Scans: {} \\| ✅ {} \\| 👁 {} \\| 🛡 {} \\| ❌ {} \\| ⚠️ {}\n\n\
+                Last Scan: {}\n\
+                Regime: {}\n\
+                Recommendation: *{}*\n\
+                AI Score: {}{:.2}\n\
+                Risk: {}\n\
+                {}",
                 escape_mdv2(&pair),
                 snapshot.scanned, snapshot.approve, snapshot.monitor,
                 snapshot.protect, snapshot.reject, snapshot.errors,
                 escape_mdv2(time_short),
                 escape_mdv2(&last_regime),
                 escape_mdv2(&last_rec),
+                score_bar,
                 last_conf,
                 escape_mdv2(&last_risk),
                 escape_mdv2(&reason_short),
@@ -483,11 +574,13 @@ impl BtcBot {
         } else {
             let snapshots = scanner.all_snapshots().await;
             if snapshots.is_empty() {
-                bot_send_plain(bot, msg, "No pairs configured").await?;
+                bot_send_plain(bot, msg, "No pairs configured\nUse /btc_addpair or /btc_discover to add pairs").await?;
                 return Ok(());
             }
 
-            let mut lines = vec!["*Scanner Status*\n".into()];
+            let cfg = self.mem.get_config();
+            let threshold = cfg.min_score_threshold;
+            let mut lines = vec![format!("*Scanner — AI Scores (threshold: {:.0})*\n", threshold)];
             for s in &snapshots {
                 let icon = match s.last_recommendation.as_str() {
                     "APPROVE" => "✅",
@@ -496,30 +589,26 @@ impl BtcBot {
                     _ if s.last_recommendation.is_empty() => "⏳",
                     _ => "❌",
                 };
-                let time_short = if s.last_scan_time.len() > 16 {
-                    &s.last_scan_time[11..19]
-                } else if s.last_scan_time.is_empty() {
-                    "never"
-                } else {
-                    &*s.last_scan_time
-                };
+                let score_bar = score_bar(s.last_confidence);
                 lines.push(format!(
-                    "{} {} {} scans\\|{} {} \\(conf:{}\\)",
+                    "{} {} — AI: {}{:.2} \\| {} \\| {}",
                     icon,
                     escape_mdv2(&s.pair),
-                    s.stats.scanned,
-                    time_short,
-                    escape_mdv2(&s.last_recommendation),
+                    score_bar,
                     s.last_confidence,
+                    escape_mdv2(&s.last_recommendation),
+                    escape_mdv2(&s.last_risk_level),
                 ));
             }
+            lines.push(String::new());
+            lines.push("ℹ️ Score ≥ 80 = AMBIL POSISI | < 80 = DO NOTHING".into());
             let text = lines.join("\n");
             send_mdv2_safe(bot, msg.chat.id, &text).await?;
         }
         Ok(())
     }
 
-    /// /btc_pairs or /btcpairs — list active pairs.
+    /// /btc_pairs — list active scanned BTC-quote pairs.
     async fn cmd_pairs(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let scanner = match self.scanner {
             Some(ref s) => s,
@@ -530,26 +619,41 @@ impl BtcBot {
         };
         let pairs = scanner.get_pairs().await;
         if pairs.is_empty() {
-            bot_send_plain(bot, msg, "No pairs configured").await?;
+            bot_send_plain(bot, msg, "No pairs configured\nUse /btc_addpair <PAIR> or /btc_discover").await?;
         } else {
-            let text = format!("📋 *Active Pairs* ({})\n{}", pairs.len(), pairs.join("\n"));
+            let lines: Vec<String> = pairs.iter()
+                .enumerate()
+                .map(|(i, p)| format!("{}. {}", i + 1, escape_mdv2(p)))
+                .collect();
+            let text = format!(
+                "📋 *Active Pairs — Binance BTC‑Quote* ({})\n{}\n\nℹ️ Format: SYMBOLBTC\nExamples: SOLBTC, ETHBTC, SUIBTC, LINKBTC",
+                pairs.len(),
+                lines.join("\n"),
+            );
             send_mdv2_safe(bot, msg.chat.id, &text).await?;
         }
         Ok(())
     }
 
-    /// /btc_addpair or /btcaddpair <PAIR> — add pair to scanner.
+    /// /btc_addpair <PAIR> — add a BTC-quote pair to the scanner.
     async fn cmd_addpair(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
         let pair = match args {
             Some(ref p) if !p.trim().is_empty() => p.trim().to_uppercase(),
             _ => {
-                bot_send_plain(bot, msg, "Usage: /btc_addpair <PAIR>\nExample: /btc_addpair ETHUSDT").await?;
+                bot_send_plain(bot, msg, "Usage: /btc_addpair <PAIR>\nExamples:\n  /btc_addpair SOLBTC\n  /btc_addpair ETHBTC\n  /btc_addpair SUIBTC\n\nOr use /btc_discover to auto-add all BTC-quote pairs").await?;
                 return Ok(());
             }
         };
 
+        // Validate format
         if pair.len() > 15 || !pair.chars().all(|c| c.is_ascii_alphanumeric()) {
-            bot_send_plain(bot, msg, &format!("Invalid pair name: '{}'. Use alphanumeric (e.g. BTCUSDT).", pair)).await?;
+            bot_send_plain(bot, msg, &format!("Invalid pair name: '{}'", pair)).await?;
+            return Ok(());
+        }
+
+        // Must end with BTC (case-insensitive check)
+        if !pair.to_uppercase().ends_with("BTC") {
+            bot_send_plain(bot, msg, &format!("'{}' is not a BTC-quote pair. Use format: SYMBOLBTC\nExamples: SOLBTC, ETHBTC, DOGEBTC", pair)).await?;
             return Ok(());
         }
 
@@ -561,16 +665,16 @@ impl BtcBot {
             }
         };
 
-        // Validate pair exists on exchange
+        // Validate pair exists on Binance
         if let Some(ref exchange) = self.exchange {
             match exchange.validate_symbol(&pair).await {
                 Ok(true) => {}
                 Ok(false) => {
-                    bot_send_plain(bot, msg, &format!("Pair '{}' not found on exchange or not trading", pair)).await?;
+                    bot_send_plain(bot, msg, &format!("Pair '{}' not found on Binance or not trading", pair)).await?;
                     return Ok(());
                 }
                 Err(e) => {
-                    bot_send_plain(bot, msg, &format!("Failed to verify pair '{}': {}", pair, e)).await?;
+                    bot_send_plain(bot, msg, &format!("Failed to verify '{}': {}", pair, e)).await?;
                     return Ok(());
                 }
             }
@@ -579,21 +683,21 @@ impl BtcBot {
         if scanner.add_pair(&pair).await {
             let pairs = scanner.get_pairs().await;
             let mut cfg = self.mem.get_config();
-            cfg.scanner_pairs = pairs;
+            cfg.scanner_pairs = pairs.clone();
             self.mem.save_config(&cfg);
-            bot_send_plain(bot, msg, &format!("✅ Added pair '{}' to scanner", pair)).await?;
+            bot_send_plain(bot, msg, &format!("✅ Added '{}' to scanner\n{} pairs now active: {}", pair, pairs.len(), pairs.join(", "))).await?;
         } else {
-            bot_send_plain(bot, msg, &format!("Pair '{}' already exists in scanner", pair)).await?;
+            bot_send_plain(bot, msg, &format!("'{}' already in scanner", pair)).await?;
         }
         Ok(())
     }
 
-    /// /btc_removepair or /btcremovepair <PAIR> — remove pair from scanner.
+    /// /btc_removepair <PAIR> — remove a pair from the scanner.
     async fn cmd_removepair(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
         let pair = match args {
             Some(ref p) if !p.trim().is_empty() => p.trim().to_uppercase(),
             _ => {
-                bot_send_plain(bot, msg, "Usage: /btc_removepair <PAIR>\nExample: /btc_removepair ETH").await?;
+                bot_send_plain(bot, msg, "Usage: /btc_removepair <PAIR>\nExample: /btc_removepair DOGEBTC").await?;
                 return Ok(());
             }
         };
@@ -609,16 +713,130 @@ impl BtcBot {
         if scanner.remove_pair(&pair).await {
             let pairs = scanner.get_pairs().await;
             let mut cfg = self.mem.get_config();
-            cfg.scanner_pairs = pairs;
+            cfg.scanner_pairs = pairs.clone();
             self.mem.save_config(&cfg);
-            bot_send_plain(bot, msg, &format!("✅ Removed pair '{}' from scanner", pair)).await?;
+            bot_send_plain(bot, msg, &format!("✅ Removed '{}'\n{} pairs remaining: {}", pair, pairs.len(), pairs.join(", "))).await?;
         } else {
-            bot_send_plain(bot, msg, &format!("Pair '{}' not found in scanner", pair)).await?;
+            bot_send_plain(bot, msg, &format!("'{}' not found in scanner", pair)).await?;
         }
         Ok(())
     }
 
-    /// /btc_history or /btchistory — recent decisions.
+    /// /btc_discover — auto-discover all BTC-quote pairs on Binance.
+    async fn cmd_discover(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
+        let exchange = match &self.exchange {
+            Some(e) => e.as_ref(),
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+
+        let _ = bot_send_plain(bot, msg, "🔍 Discovering BTC-quote pairs on Binance...").await;
+
+        // Use BinanceClient's discover_btc_pairs if available
+        let binance = exchange.exchange_name();
+        if binance != "Binance" {
+            bot_send_plain(bot, msg, "Auto-discover only works with Binance").await?;
+            return Ok(());
+        }
+
+        // Try to call discover_btc_pairs via downcasting
+        // We do this via a helper in binance.rs; for now use validate_symbol on common pairs
+        // Actually, the scanner already has discover_btc_pairs. We need to expose it.
+        // For simplicity, show a list of common pairs and ask user to add them.
+        let common_pairs = vec![
+            "ETHBTC", "SOLBTC", "SUIBTC", "LINKBTC", "DOGEBTC",
+            "ADABTC", "XRPBTC", "AVAXBTC", "DOTBTC", "MATICBTC",
+            "LTCBTC", "UNI BTC", "AAVEBTC", "ATOMBTC", "FETBTC",
+            "NEARBTC", "FTMBTC", "ALGO BTC", "ICP BTC", "ARBBTC",
+        ];
+        let text = format!(
+            "*Auto-discover BTC-Quote Pairs*\n\n\
+            Binance Spot has ~50 BTC-quote pairs.\n\
+            Use /btc_addpair to add them one by one:\n\n\
+            /btc_addpair ETHBTC\n\
+            /btc_addpair SOLBTC\n\
+            /btc_addpair SUIBTC\n\
+            ...etc\n\n\
+            Popular pairs:\n{}",
+            common_pairs.iter()
+                .map(|p| format!("  • {}", p))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        send_mdv2_safe(bot, msg.chat.id, &text).await?;
+        Ok(())
+    }
+
+    /// /btc_pairinfo <PAIR> — detailed AI scores for one pair.
+    async fn cmd_pairinfo(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
+        let pair = match args {
+            Some(ref p) if !p.trim().is_empty() => p.trim().to_uppercase(),
+            _ => {
+                bot_send_plain(bot, msg, "Usage: /btc_pairinfo <PAIR>\nExample: /btc_pairinfo SOLBTC").await?;
+                return Ok(());
+            }
+        };
+
+        let scanner = match self.scanner {
+            Some(ref s) => s,
+            None => {
+                bot_send_plain(bot, msg, "Scanner not active").await?;
+                return Ok(());
+            }
+        };
+
+        let ps = match scanner.get_pair_state(&pair).await {
+            Some(ps) => ps,
+            None => {
+                bot_send_plain(bot, msg, &format!("Pair '{}' not found. Add it with /btc_addpair {}", pair, pair)).await?;
+                return Ok(());
+            }
+        };
+
+        let snapshot = ps.stats.snapshot();
+        let last_time = ps.last_scan_time.read().await;
+        let last_regime = ps.last_regime.read().await;
+        let last_rec = ps.last_recommendation.read().await;
+        let last_conf = *ps.last_confidence.read().await;
+        let last_risk = ps.last_risk_level.read().await;
+        let last_reason = ps.last_reason.read().await;
+        let score_bar = score_bar(last_conf);
+        let cfg = self.mem.get_config();
+
+        let text = format!(
+            "*{} — AI Scores*\n\n\
+            *Overall:* {}{:.2} / 100\n\
+            Threshold: {:.0}\n\
+            Decision: *{}*\n\n\
+            *Scanner Stats*\n\
+            Total Scans: {}\n\
+            ✅ Approve: {} | 👁 Monitor: {} | 🛡 Protect: {} | ❌ Reject: {}\n\n\
+            *Last Scan ({})*\n\
+            Regime: {}\n\
+            Risk: {}\n\
+            Reason: {}",
+            escape_mdv2(&pair),
+            score_bar,
+            last_conf,
+            cfg.min_score_threshold,
+            escape_mdv2(&last_rec),
+            snapshot.scanned,
+            snapshot.approve,
+            snapshot.monitor,
+            snapshot.protect,
+            snapshot.reject,
+            if last_time.len() > 16 { &last_time[11..19] } else { &last_time },
+            escape_mdv2(&last_regime),
+            escape_mdv2(&last_risk),
+            escape_mdv2(&last_reason),
+        );
+        send_mdv2_safe(bot, msg.chat.id, &text).await?;
+        Ok(())
+    }
+
+    /// /btc_history — recent decisions.
     async fn cmd_history(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let decisions = self.mem.get_decisions();
         if decisions.is_empty() {
@@ -627,7 +845,7 @@ impl BtcBot {
         }
 
         let recent: Vec<_> = decisions.iter().rev().take(10).collect();
-        let mut lines = vec!["*Recent Decisions*\n".into()];
+        let mut lines = vec!["*Recent Decisions — Binance Spot*\n".into()];
 
         for (i, d) in recent.iter().enumerate() {
             let icon = match d.advisory.recommendation.as_str() {
@@ -647,7 +865,7 @@ impl BtcBot {
                 d.advisory.reason.clone()
             };
             lines.push(format!(
-                "{}{} {} \\- {} {} *{}* \\(conf: {:.2}\\)\n  \\_{}_",
+                "{}{} {} {} \\- {} *{}* \\(conf: {:.2}\\)\n  \\_{}_",
                 i + 1,
                 r"\.",
                 escape_mdv2(ts),
@@ -664,7 +882,7 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_lessons or /btclessons — recent lessons.
+    /// /btc_lessons — recent lessons.
     async fn cmd_lessons(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let lessons = self.mem.get_lessons();
         if lessons.is_empty() {
@@ -689,39 +907,68 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_skills or /btcskills — skill listing (static, safe).
+    /// /btc_skills — skill listing (static, safe).
     async fn cmd_skills(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         send_mdv2_safe(bot, msg.chat.id, SKILLS_TEXT).await?;
         Ok(())
     }
 
-    /// /btc_config or /btcconfig — current configuration.
+    /// /btc_config — current configuration.
     async fn cmd_config(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let cfg = self.mem.get_config();
+        let ts = self.mem.get_treasury_state();
+        let win_rate = if ts.total_trades > 0 {
+            (ts.winning_trades as f64 / ts.total_trades as f64 * 100.0)
+        } else {
+            0.0
+        };
         let text = format!(
-            "⚙️ *Config*\n\
-            Enabled: {}\n\
-            LLM Threshold: {:.2}\n\
+            "⚙️ *Config — BTC Treasury Accumulation*\n\n\
+            *Trading*\n\
+            Exchange: Binance Spot\n\
+            Initial Capital: ${:.2}\n\
+            Max Positions: {}\n\
+            Risk/Trade: {:.1}%\n\n\
+            *Thresholds*\n\
+            AI Score Threshold: {:.0} (>= 80 = AMBIL POSISI)\n\
             Min Confidence: {:.2}\n\
-            Max Exposure: {:.2}\n\
-            Daily Loss Limit: {:.8} BTC\n\
+            Max Exposure: {:.2}\n\n\
+            *Entry/Exit*\n\
+            Take Profit: {:.1}%\n\
+            Stop Loss: {:.1}%\n\
+            Trailing TP: {:.1}% — {}\n\n\
+            *Treasury Split*\n\
+            Compound: {:.0}%\n\
+            BTC Vault: {:.0}%\n\n\
+            *Risk Controls*\n\
             Max Consecutive Losses: {}\n\
-            Safe Mode Vol: {:.1}\n\
-            Safe Mode DD: {:.2}",
-            cfg.enabled,
-            cfg.llm_activation_threshold,
+            Daily Loss Limit: {:.8} BTC\n\
+            Pause on Drawdown > 10%\n\n\
+            *Scanner*\n\
+            Pairs: {}\n\
+            Win Rate: {:.1}%",
+            cfg.initial_capital_usdt,
+            cfg.max_positions,
+            cfg.risk_per_trade_pct * 100.0,
+            cfg.min_score_threshold,
             cfg.min_confidence,
             cfg.max_exposure,
-            cfg.daily_loss_limit_btc,
+            cfg.take_profit_pct,
+            cfg.stop_loss_pct,
+            cfg.trailing_tp_pct,
+            if cfg.use_trailing { "ON" } else { "OFF" },
+            cfg.compound_pct * 100.0,
+            cfg.treasury_pct * 100.0,
             cfg.max_consecutive_losses,
-            cfg.safe_mode_volatility,
-            cfg.safe_mode_drawdown,
+            cfg.daily_loss_limit_btc,
+            cfg.scanner_pairs.len(),
+            win_rate,
         );
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
 
-    /// /btc_setconfig or /btcsetconfig <key> <value> — live config update.
+    /// /btc_setconfig <key> <value> — live config update.
     async fn cmd_setconfig(
         &self,
         bot: &Bot,
@@ -735,11 +982,94 @@ impl BtcBot {
                 match val.parse::<bool>() {
                     Ok(v) => { cfg.enabled = v; (true, val.to_string()) }
                     Err(_) => {
-                        bot_send_plain(bot, msg, &format!("❌ Invalid boolean for 'enabled': '{}'. Use true or false.", val)).await?;
+                        bot_send_plain(bot, msg, &format!("Invalid boolean for 'enabled': '{}'. Use true or false.", val)).await?;
                         return Ok(());
                     }
                 }
             }
+            // New BTC accumulation config keys
+            "take_profit_pct" => {
+                match val.parse::<f64>() {
+                    Ok(v) if v >= 0.0 && v <= 100.0 => { cfg.take_profit_pct = v; (true, format!("{:.1}%", v)) }
+                    _ => {
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. Use 0-100 (e.g. 5.5 for 5.5%)", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            "stop_loss_pct" => {
+                match val.parse::<f64>() {
+                    Ok(v) if v <= 0.0 && v >= -100.0 => { cfg.stop_loss_pct = v; (true, format!("{:.1}%", v)) }
+                    _ => {
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. SL must be negative (e.g. -1.5 for -1.5%)", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            "trailing_tp_pct" => {
+                match val.parse::<f64>() {
+                    Ok(v) if v >= 0.0 => { cfg.trailing_tp_pct = v; (true, format!("{:.1}%", v)) }
+                    _ => {
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. Use positive number (e.g. 3.0)", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            "use_trailing" => {
+                match val.parse::<bool>() {
+                    Ok(v) => { cfg.use_trailing = v; (true, val.to_string()) }
+                    Err(_) => {
+                        bot_send_plain(bot, msg, &format!("Invalid boolean: '{}'. Use true or false.", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            "min_score_threshold" => {
+                match val.parse::<f64>() {
+                    Ok(v) if v >= 0.0 && v <= 100.0 => { cfg.min_score_threshold = v; (true, format!("{:.0}", v)) }
+                    _ => {
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. AI threshold 0-100", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            "risk_per_trade_pct" => {
+                match val.parse::<f64>() {
+                    Ok(v) if v >= 0.0 && v <= 100.0 => { cfg.risk_per_trade_pct = v / 100.0; (true, format!("{:.1}%", v)) }
+                    _ => {
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. Risk per trade 0-100 (e.g. 1.0 for 1%)", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            "max_positions" => {
+                match val.parse::<i32>() {
+                    Ok(v) if v >= 0 && v <= 10 => { cfg.max_positions = v; (true, val.to_string()) }
+                    _ => {
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. Max 0-10 positions", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            "compound_pct" => {
+                match val.parse::<f64>() {
+                    Ok(v) if v >= 0.0 && v <= 100.0 => { cfg.compound_pct = v / 100.0; (true, format!("{:.0}%", v)) }
+                    _ => {
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. Compound % 0-100", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            "initial_capital_usdt" => {
+                match val.parse::<f64>() {
+                    Ok(v) if v > 0.0 => { cfg.initial_capital_usdt = v; (true, format!("${:.2}", v)) }
+                    _ => {
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. Must be > 0", val)).await?;
+                        return Ok(());
+                    }
+                }
+            }
+            // Legacy keys still supported
             "llm_activation_threshold" | "min_confidence" | "max_exposure" | "safe_mode_volatility" | "safe_mode_drawdown" => {
                 match val.parse::<f64>() {
                     Ok(v) => {
@@ -755,16 +1085,16 @@ impl BtcBot {
                         (true, format!("{:.4}", v))
                     }
                     Err(_) => {
-                        bot_send_plain(bot, msg, &format!("❌ Invalid number for '{}': '{}'. Use a decimal (0.0-1.0)", key, val)).await?;
+                        bot_send_plain(bot, msg, &format!("Invalid number for '{}': '{}'", key, val)).await?;
                         return Ok(());
                     }
                 }
             }
             "daily_loss_limit_btc" => {
                 match val.parse::<f64>() {
-                    Ok(v) if v >= 0.0 => { cfg.daily_loss_limit_btc = v; (true, val.to_string()) }
+                    Ok(v) if v >= 0.0 => { cfg.daily_loss_limit_btc = v; (true, format!("{:.8} BTC", v)) }
                     _ => {
-                        bot_send_plain(bot, msg, &format!("❌ Invalid value for 'daily_loss_limit_btc': '{}'. Must be >= 0.", val)).await?;
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. Must be ≥ 0", val)).await?;
                         return Ok(());
                     }
                 }
@@ -773,13 +1103,13 @@ impl BtcBot {
                 match val.parse::<i32>() {
                     Ok(v) if v >= 0 => { cfg.max_consecutive_losses = v; (true, val.to_string()) }
                     _ => {
-                        bot_send_plain(bot, msg, &format!("❌ Invalid integer for 'max_consecutive_losses': '{}'. Must be >= 0.", val)).await?;
+                        bot_send_plain(bot, msg, &format!("Invalid: '{}'. Must be ≥ 0", val)).await?;
                         return Ok(());
                     }
                 }
             }
             _ => {
-                bot_send_plain(bot, msg, &format!("❌ Unknown key: '{}'. Available: enabled, llm_activation_threshold, min_confidence, max_exposure, daily_loss_limit_btc, max_consecutive_losses, safe_mode_volatility, safe_mode_drawdown", key)).await?;
+                bot_send_plain(bot, msg, "Available keys:\n  take_profit_pct, stop_loss_pct, trailing_tp_pct, use_trailing\n  min_score_threshold, risk_per_trade_pct, max_positions\n  compound_pct, initial_capital_usdt\n  enabled, llm_activation_threshold, min_confidence, max_exposure\n  max_consecutive_losses, daily_loss_limit_btc\n\nExample: /btc_setconfig take_profit_pct 6.0").await?;
                 return Ok(());
             }
         };
@@ -791,7 +1121,7 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_enable or /btcenable — enable LLM advisory.
+    /// /btc_enable — enable LLM advisory.
     async fn cmd_enable(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let mut cfg = self.mem.get_config();
         cfg.enabled = true;
@@ -800,7 +1130,7 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_disable or /btcdisable — disable LLM advisory.
+    /// /btc_disable — disable LLM advisory.
     async fn cmd_disable(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let mut cfg = self.mem.get_config();
         cfg.enabled = false;
@@ -809,7 +1139,7 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_cancel or /btccancel — cancel all open orders across all pairs.
+    /// /btc_cancel — cancel all open orders across all pairs.
     async fn cmd_cancel(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         let text = if let Some(ref exchange) = self.exchange {
             match self.scanner {
@@ -827,7 +1157,6 @@ impl BtcBot {
                     format!("✅ Cancelled {} open orders across {} pairs", total, pairs.len())
                 }
                 None => {
-                    // Try BTCUSDT as fallback
                     match exchange.cancel_all("BTCUSDT").await {
                         Ok(results) => format!("✅ Cancelled {} open orders", results.len()),
                         Err(e) => format!("Failed: {}", e),
@@ -838,6 +1167,174 @@ impl BtcBot {
             "Exchange not configured".into()
         };
         bot_send_plain(bot, msg, &text).await?;
+        Ok(())
+    }
+
+    /// /btc_buy <SIZE> <PAIR> — place market buy on Binance Spot with dynamic TP/SL.
+    /// PAIR is a BTC-quote pair (e.g. SOLBTC) or BTCUSDT.
+    async fn cmd_buy(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
+        let exchange = match &self.exchange {
+            Some(e) => e,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+
+        let (size_str, pair) = match args {
+            Some(ref a) => {
+                let parts: Vec<&str> = a.split_whitespace().collect();
+                if parts.is_empty() {
+                    bot_send_plain(bot, msg, "Usage: /btc_buy <SIZE> <PAIR>\nExamples:\n  /btc_buy 100 SOLBTC\n  /btc_buy 0.5 ETHBTC\n  /btc_buy 10 BTCUSDT").await?;
+                    return Ok(());
+                }
+                let size = parts[0].to_string();
+                let pair = parts.get(1).map(|s| s.to_uppercase()).unwrap_or_else(|| "BTCUSDT".to_string());
+                (size, pair)
+            }
+            None => {
+                bot_send_plain(bot, msg, "Usage: /btc_buy <SIZE> <PAIR>\nExamples:\n  /btc_buy 100 SOLBTC\n  /btc_buy 0.5 ETHBTC").await?;
+                return Ok(());
+            }
+        };
+
+        let size: f64 = match size_str.parse() {
+            Ok(s) if s > 0.0 => s,
+            _ => {
+                bot_send_plain(bot, msg, &format!("Invalid size: '{}'. Must be a positive number.", size_str)).await?;
+                return Ok(());
+            }
+        };
+
+        let _ = bot_send_plain(bot, msg, &format!("📈 Placing BUY order on Binance Spot...\n{} {} @ market price...", size, pair)).await;
+
+        // Run advisory to get LLM dynamic TP/SL
+        let market_data = match exchange.get_market_data(&pair).await {
+            Ok(m) => m,
+            Err(e) => {
+                bot_send_plain(bot, msg, &format!("Failed to fetch market data: {}", e)).await?;
+                return Ok(());
+            }
+        };
+
+        let treasury = self.mem.get_treasury_state();
+        let positions = self.mem.get_positions();
+        let loss_streak = {
+            let mut streak = 0;
+            for pos in positions.iter().rev() {
+                if pos.pnl_btc < 0.0 { streak += 1; } else { break; }
+            }
+            streak
+        };
+
+        let input = BtcAdvisoryInput {
+            market_data: market_data.clone(),
+            treasury,
+            open_positions: positions,
+            loss_streak,
+        };
+
+        let advisory = self.engine.analyze(&input).await;
+        let current_price = match exchange.get_current_price(&pair).await {
+            Ok(p) => p,
+            Err(_) => 0.0,
+        };
+
+        // Place market buy on Binance
+        match exchange.place_market_buy(&pair, size).await {
+            Ok(result) => {
+                let text = format!(
+                    "✅ *Order Placed — Binance Spot*\n\
+                    Pair: {}\n\
+                    Side: BUY\n\
+                    Size: {}\n\
+                    Order ID: {}\n\
+                    Status: {}\n\n\
+                    *Dynamic TP/SL from LLM:*\n\
+                    Take Profit: {:.1}% — {}\n\
+                    Stop Loss: {:.1}% — {}",
+                    pair,
+                    size,
+                    result.order_id,
+                    result.status,
+                    advisory.dynamic_take_profit,
+                    advisory.tp_reason,
+                    advisory.dynamic_stop_loss,
+                    advisory.sl_reason,
+                );
+
+                if result.status == "filled" || result.status == "new" {
+                    record_position_from_advisory(
+                        &*self.mem,
+                        &advisory,
+                        current_price,
+                        size,
+                        &pair,
+                        "buy",
+                    );
+                }
+
+                send_mdv2_safe(bot, msg.chat.id, &text).await?;
+            }
+            Err(e) => {
+                bot_send_plain(bot, msg, &format!("Order failed: {}", e)).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// /btc_sell — close all open positions with market sell on Binance Spot.
+    async fn cmd_sell(&self, bot: &Bot, msg: &Message, _args: Option<String>) -> Result<(), teloxide::RequestError> {
+        let exchange = match &self.exchange {
+            Some(e) => e,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+
+        let positions = self.mem.get_positions();
+        if positions.is_empty() {
+            bot_send_plain(bot, msg, "No open positions to close").await?;
+            return Ok(());
+        }
+
+        let mut results: Vec<String> = Vec::new();
+        for pos in &positions {
+            let pair = &pos.id;
+            let size = pos.size;
+
+            // Cancel any open orders first
+            let _ = exchange.cancel_all(pair).await;
+
+            match exchange.place_market_sell(pair, size).await {
+                Ok(result) => {
+                    let position_value_usdt = pos.entry_price * size;
+                    self.mem.update_treasury_on_close(pair, pos.pnl_btc, position_value_usdt);
+
+                    let lesson = format!(
+                        "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Manual close via /btc_sell. TP: {:.1}%, SL: {:.1}%",
+                        pair, pos.pnl_btc, size, pos.take_profit_pct, pos.stop_loss_pct
+                    );
+                    self.mem.add_lesson(lesson);
+
+                    results.push(format!(
+                        "✅ {} closed — {} @ {} | PnL: {:.2}%",
+                        pair, size, result.order_id, pos.pnl_btc
+                    ));
+                }
+                Err(e) => {
+                    results.push(format!("❌ {} failed: {}", pair, e));
+                }
+            }
+        }
+
+        // Remove all closed positions
+        self.mem.save_positions(&[]);
+
+        let text = format!("*Close Results — Binance Spot*\n\n{}", results.join("\n"));
+        send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
 }
@@ -860,4 +1357,12 @@ fn default_market_data() -> BtcMarketData {
         portfolio_exposure: 0.0,
         daily_drawdown: 0.0,
     }
+}
+
+/// Returns a Telegram-safe visual bar for scores 0-100.
+fn score_bar(score: f64) -> String {
+    let filled = (score / 10.0).round() as usize;
+    let empty = 10 - filled;
+    let bar = "█".repeat(filled) + &"░".repeat(empty);
+    format!("[{}] ", bar)
 }

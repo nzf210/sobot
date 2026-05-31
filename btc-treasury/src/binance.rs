@@ -5,7 +5,7 @@ use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use sha2::Sha256;
 
-use crate::models::BtcMarketData;
+use crate::models::{BtcMarketData, Ohlcv, PairMetrics};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -77,6 +77,30 @@ pub struct BinanceClient {
     api_secret: String,
     client: reqwest::Client,
 }
+
+    // ── OHLCV / Kline data ─────────────────────────────────────────────────────
+
+    #[derive(Debug, Deserialize)]
+    struct BinanceKline {
+        #[serde(rename = "0")]
+        open_time: i64,
+        #[serde(rename = "1")]
+        open: String,
+        #[serde(rename = "2")]
+        high: String,
+        #[serde(rename = "3")]
+        low: String,
+        #[serde(rename = "4")]
+        close: String,
+        #[serde(rename = "5")]
+        volume: String,
+        #[serde(rename = "6")]
+        close_time: i64,
+        #[serde(rename = "7")]
+        quote_volume: String,
+    }
+
+
 
 impl BinanceClient {
     pub fn new(api_key: String, api_secret: String, base_url: Option<String>) -> Self {
@@ -367,4 +391,59 @@ impl BinanceClient {
             Err(_) => Ok(false),
         }
     }
+
+    /// Fetch klines (OHLCV) for a symbol and interval.
+    /// Returns up to `limit` candles, most recent first.
+    pub async fn get_klines(
+        &self,
+        symbol: &str,
+        interval: &str,
+        limit: u32,
+    ) -> Result<Vec<Ohlcv>> {
+        let query = format!("symbol={}&interval={}&limit={}", symbol, interval, limit);
+        let data: Vec<Vec<serde_json::Value>> = self.public_get("/api/v3/klines", &query).await?;
+        let mut klines = Vec::with_capacity(data.len());
+        for row in data {
+            if row.len() < 8 { continue; }
+            klines.push(Ohlcv {
+                open_time: row[0].as_i64().unwrap_or(0),
+                open: parse_f64(&row[1]),
+                high: parse_f64(&row[2]),
+                low: parse_f64(&row[3]),
+                close: parse_f64(&row[4]),
+                volume: parse_f64(&row[5]),
+                quote_volume: parse_f64(&row[7]),
+            });
+        }
+        Ok(klines)
+    }
+
+    /// Discover all BTC-quote pairs currently trading on Binance Spot.
+    pub async fn discover_btc_pairs(&self) -> Result<Vec<String>> {
+        #[derive(Deserialize)]
+        struct AllSymbols { symbols: Vec<BinanceSymbol> }
+        let info: AllSymbols = self.public_get("/api/v3/exchangeInfo", "").await?;
+        let pairs: Vec<String> = info.symbols
+            .into_iter()
+            .filter(|s| s.symbol.ends_with("BTC") && s.status == "TRADING")
+            .map(|s| s.symbol)
+            .collect();
+        Ok(pairs)
+    }
+
+    /// Get current price for a symbol (public endpoint).
+    pub async fn get_price(&self, symbol: &str) -> Result<f64> {
+        #[derive(Deserialize)]
+        struct PriceResp { price: String }
+        let query = format!("symbol={}", symbol);
+        let resp: PriceResp = self.public_get("/api/v3/ticker/price", &query).await?;
+        resp.price.parse::<f64>()
+            .map_err(|e| anyhow::anyhow!("parse price error: {}", e))
+    }
+}
+
+fn parse_f64(v: &serde_json::Value) -> f64 {
+    v.as_str()
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(0.0)
 }
