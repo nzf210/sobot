@@ -92,3 +92,5 @@ venv/
 .venv/
 env/
 .env/
+AUDIT_REPORT.md
+FIXES_SUMMARY.md

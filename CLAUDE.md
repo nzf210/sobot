@@ -13,7 +13,7 @@ Production-oriented hybrid trading system yang mengautomasi penemuan token Solan
 ```
 docker-compose.yml (solana-net bridge)
 
-backend-go (Go/Gin, port 8080)
+backend-go (Go/Gin, port 8089)
   ├── orchestrator (14-stage pipeline)
   ├── scanner (PumpFun/Raydium/Meteora watchers)
   ├── executor client (HTTP → executor-ts)
@@ -21,13 +21,15 @@ backend-go (Go/Gin, port 8080)
   ├── telegram bot (/analyze, /config, /status, dll)
   └── 14 engines (momentum, regime, risk, confidence, dll)
 
-executor-ts (Node/Express, port 3000)
+executor-ts (Node/Express, port 3009)
   ├── Jupiter Swap v6 executor
   ├── Encrypted wallet loader
   └── DLMM deployment stub
 
 btc-treasury (Rust/Actix, port 8090)
   ├── AdvisoryEngine (hybrid quant + LLM)
+  ├── Binance Spot API client
+  ├── HyperLiquid integration
   └── BTC Telegram bot
 ```
 
@@ -35,7 +37,7 @@ btc-treasury (Rust/Actix, port 8090)
 
 ## Services
 
-### backend-go (port 8080)
+### backend-go (port 8089)
 
 **Stack**: Go, Gin, SQLite (via go-sqlite3), Zap logger
 
@@ -66,7 +68,7 @@ btc-treasury (Rust/Actix, port 8090)
 
 ---
 
-### executor-ts (port 3000)
+### executor-ts (port 3009)
 
 **Stack**: TypeScript, Node.js, Express, Solana Web3.js, Jupiter SDK, Meteora SDK (stub)
 
@@ -91,24 +93,42 @@ btc-treasury (Rust/Actix, port 8090)
 
 **Stack**: Rust, Actix-web
 
+**Integrations**: Binance Spot API, HyperLiquid (optional), OpenAI-compatible LLM
+
 **Key files**:
-- `src/main.rs` — Entry point; initializes config, engine, optional Binance client, scanner, reporter, Telegram bot
+- `src/main.rs` — Entry point; initializes config, engine, Binance client, scanner, reporter, Telegram bot
 - `src/server.rs` — Actix-web server; 8 REST endpoints
 - `src/engine.rs` — `AdvisoryEngine` — hybrid quant + LLM BTC trading advisor; 10-regime classifier; risk scoring; treasury mode logic
 - `src/models.rs` — All data types: `BtcMarketData`, `BtcTreasuryState`, `BtcAdvisoryInput`, `BtcAdvisoryPosition`, `BtcConfig`, `FullBtcAdvisory`
 - `src/llm.rs` — OpenAI-compatible LLM client
-- `src/scanner.rs` — Binance pair scanner (async, configurable interval)
+- `src/scanner.rs` — Binance pair scanner (async, configurable interval); discovers BTC-quote pairs
 - `src/reporter.rs` — Periodic Telegram treasury reports
-- `src/telegram_bot.rs` — BTC Telegram bot with commands
-- `src/binance.rs` — Binance Spot API client with HMAC-SHA256 signing
+- `src/telegram_bot.rs` — BTC Telegram bot with 18+ commands (see Telegram Bot Commands section)
+- `src/binance.rs` — Binance Spot API client with HMAC-SHA256 signing; market data, order execution, position tracking
+- `src/exchange.rs` — HyperLiquid integration (optional); perpetual trading support
+- `src/position_monitor.rs` — Position tracking with TP/SL/trailing stops
+- `src/execution_engine.rs` — Order execution and position management
+
+**Binance Spot Integration**:
+- Real-time market data fetching (OHLCV, ticker)
+- Pair discovery and management (add/remove/auto-discover BTC-quote pairs)
+- Market buy/sell execution with dynamic TP/SL
+- Position tracking with trailing stops
+- Order cancellation and position closing
+- Account balance queries
+
+**HyperLiquid Integration** (optional):
+- Perpetual trading support (separate from Spot)
+- Encrypted credential storage (`hyperliquid.enc`)
+- Market data and advisory analysis
 
 **API endpoints**:
-- `GET /health`
+- `GET /health` — Health check
 - `POST /btc/advisory` — Analyze market data → advisory recommendation
-- `GET /btc/treasury` / `POST /btc/treasury`
+- `GET /btc/treasury` / `POST /btc/treasury` — Get/update treasury state
 - `POST /btc/market` — Submit market update; returns advisory with loss streak analysis
-- `GET /btc/positions`
-- `GET /btc/config` / `POST /btc/config`
+- `GET /btc/positions` — Get open positions
+- `GET /btc/config` / `POST /btc/config` — Get/update configuration
 
 **AdvisoryEngine**: Pure advisory (no auto-execution). Risk levels: LOW/MEDIUM/HIGH/CRITICAL. Treasury modes: ACCUMULATE/PROTECT/REDUCE_RISK/SAFE_MODE. Recommendations: REJECT/MONITOR/APPROVE/REDUCE_EXPOSURE/EXIT_POSITION/PROTECT_TREASURY/ENABLE_SAFE_MODE.
 
@@ -175,16 +195,20 @@ Sequential stages:
 | `WALLET_PASSWORD` | Password to decrypt `wallet.enc` |
 | `WALLET_PATH` | Encrypted wallet file path (default: `executor-ts/wallet.enc`) |
 | `DATA_DIR` | JSON store directory (default: `./data/memory`) |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token (Solana bot) |
 | `TELEGRAM_WHITELIST_USER_IDS` | Comma-separated Telegram chat IDs |
 | `LLM_API_KEY` | OpenAI API key |
 | `LLM_MODEL` | LLM model (default: `gpt-4o-mini`) |
 | `LLM_URL` | LLM API base URL |
 | `LLM_ENABLED` | Enable LLM analysis (default: `true`) |
-| `BACKEND_PORT` | Go backend port (default: `8080`) |
-| `EXECUTOR_PORT` | TS executor port (default: `3000`) |
+| `BACKEND_PORT` | Go backend port (default: `8089`) |
+| `EXECUTOR_PORT` | TS executor port (default: `3009`) |
 | `EXECUTOR_API_KEY` | Shared API key between backend and executor |
 | `LOG_LEVEL` | Zap log level (debug/info/warn/error) |
+| `BINANCE_API_KEY` | Binance Spot API key (BTC Treasury) |
+| `BINANCE_API_SECRET` | Binance Spot API secret (BTC Treasury) |
+| `HYPERLIQUID_KEY_PATH` | Path to encrypted HyperLiquid credentials (default: `./hyperliquid.enc`) |
+| `BTC_TREASURY_PORT` | BTC Treasury service port (default: `8090`) |
 
 ### User Config (runtime, `data/memory/user-config.json`)
 Controls trading behavior at runtime: `autoTrade`, `dryRun`, `scannerIntervalSec`, `minConfidence`, `minLiquiditySOL`, `maxLiquiditySOL`, `minVolumeSOL`, `minOrganicScore`, `maxWashTradePct`, `minMcapSOL`, `maxMcapSOL`, `maxTop10Pct`, `maxDeployAmountSol`, `takeProfitPct`, `stopLossPct`, `trailingTakeProfit`, `maxOpenPositions`, `dailyLossLimitUsd`, `maxConsecutiveLosses`.
@@ -195,7 +219,8 @@ Controls trading behavior at runtime: `autoTrade`, `dryRun`, `scannerIntervalSec
 
 | File | Content |
 |------|---------|
-| `user-config.json` | Runtime trading config |
+| `user-config.json` | Runtime trading config (Solana bot) |
+| `config.json` | System configuration (internal use) |
 | `pool-memory.json` | Open and closed positions with PnL |
 | `decision-log.json` | Full history of pipeline decisions |
 | `lessons.json` | Self-taught lessons from trade outcomes |
@@ -217,7 +242,22 @@ Not a separate sniper component — the "sniper" behavior emerges from the pipel
 - **Position manager** monitors with smart trailing TP (adjusts trail % based on momentum: Low=10%, Medium=12%, High=15%, Extreme=20%)
 
 ### DLMM Automation
-The `DeployDLMM` endpoint in executor-ts is a **stub** — returns hardcoded success. `LLMDLMMSuitability` score is computed by LLM narrative engine but actual Meteora DLMM SDK integration is not yet implemented.
+
+⚠️ **NOT PRODUCTION-READY** — The `DeployDLMM` endpoint in executor-ts is a **stub** that returns hardcoded success. 
+
+**Current Status**:
+- `LLMDLMMSuitability` score is computed by LLM narrative engine
+- Actual Meteora DLMM SDK integration is **not yet implemented**
+- Endpoint exists for testing but should not be used in production
+
+**What Needs Implementation**:
+- [ ] Integrate Meteora DLMM SDK
+- [ ] Implement actual liquidity pool deployment
+- [ ] Add position management for DLMM positions
+- [ ] Implement fee tier selection logic
+- [ ] Add position monitoring and rebalancing
+
+**Workaround**: For production, disable DLMM recommendations in LLM prompt or use Jupiter swaps only.
 
 ### LLM Reasoning Pipeline
 1. **Fast path (heuristic fallback)**: if `LLM_ENABLED=false` or no API key, returns `MICRO_ENTRY_ONLY` with fixed scores
@@ -255,8 +295,97 @@ docker-compose up -d
 cd executor-ts && npm run generate-wallet
 ```
 
+**Port Configuration Note**: When using `docker-compose`, the default ports are:
+- backend-go: **8089** (not 8080)
+- executor-ts: **3009** (not 3000)
+- btc-treasury: **8090**
+
+These defaults override `.env.sample` values. To use different ports, set environment variables before running docker-compose:
+```bash
+BACKEND_PORT=8080 EXECUTOR_PORT=3000 docker-compose up -d
+```
+
 ---
 
 ## Telegram Bot Commands
 
+### Solana Bot (backend-go)
 `/help`, `/analyze <token>`, `/health`, `/status`, `/positions`, `/close <index>`, `/closeall`, `/dryrun on|off`, `/config`, `/setconfig <key> <value>` (supports bool and float values at runtime)
+
+### BTC Treasury Bot (btc-treasury)
+
+**Account & Balances**
+- `/btc_status` — Spot balance (USDT + all assets), open orders
+- `/btc_treasury` — BTC holdings, vault, compound balance, trade stats
+
+**Market & Analysis**
+- `/btc_market [PAIR]` — Live market data + OHLCV summary
+- `/btc_advisory [PAIR]` — Full quant + LLM advisory
+- `/btc_scan [PAIR]` — Scanner stats per pair (AI scores)
+- `/btc_pairinfo <PAIR>` — AI scores for one pair
+
+**Positions & Trading**
+- `/btc_positions` — Open positions with TP/SL/trailing
+- `/btc_buy <SIZE> <PAIR>` — Market buy with dynamic TP/SL
+- `/btc_sell` — Close ALL positions at market price
+- `/btc_close <index>` — Close position by index (1-based)
+- `/btc_closeall` — Force close all positions
+- `/btc_cancel` — Cancel all open orders
+
+**Pair Management (Binance BTC-Quote)**
+- `/btc_pairs` — List active scanned pairs
+- `/btc_addpair <PAIR>` — Add pair (e.g. SOLBTC, ETHBTC, SUIBTC)
+- `/btc_removepair <PAIR>` — Remove pair from scanner
+- `/btc_discover` — Auto-discover all BTC-quote pairs on Binance
+
+**History & Learning**
+- `/btc_history` — Last 10 decisions
+- `/btc_lessons` — Recent self-learning lessons
+
+---
+
+## BTC Treasury Usage Examples
+
+### Setup
+```bash
+# 1. Set Binance API credentials in .env
+BINANCE_API_KEY=your_key
+BINANCE_API_SECRET=your_secret
+
+# 2. Start BTC Treasury service
+docker-compose up btc-treasury
+
+# 3. Verify health
+curl http://localhost:8090/health
+```
+
+### Common Workflows
+
+**Monitor BTC Accumulation**
+```
+/btc_status          # Check USDT balance and holdings
+/btc_treasury        # View total BTC holdings and vault
+/btc_positions       # See open positions with TP/SL
+```
+
+**Discover and Add Trading Pairs**
+```
+/btc_discover        # Auto-discover all BTC-quote pairs on Binance
+/btc_addpair SOLBTC  # Add SOLBTC pair to scanner
+/btc_pairs           # List active pairs
+```
+
+**Execute Trade**
+```
+/btc_advisory SOLBTC # Get quant + LLM advisory for SOLBTC
+/btc_buy 0.5 SOLBTC  # Market buy 0.5 BTC worth of SOL with TP/SL
+/btc_sell            # Close all positions at market
+```
+
+**Analyze & Learn**
+```
+/btc_market SOLBTC   # Live market data + OHLCV
+/btc_scan SOLBTC     # AI scores for pair
+/btc_history         # Last 10 decisions
+/btc_lessons         # Self-learning lessons from trades
+```

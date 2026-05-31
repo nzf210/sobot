@@ -2,6 +2,7 @@ services:
   backend:
     build: ./backend-go
     container_name: solana-hybrid-backend
+    # Default port 8089 (override with BACKEND_PORT env var)
     ports:
       - "${BACKEND_PORT:-8089}:${BACKEND_PORT:-8089}"
     env_file:
@@ -19,6 +20,7 @@ services:
   executor:
     build: ./executor-ts
     container_name: solana-hybrid-executor
+    # Default port 3009 (override with EXECUTOR_PORT env var)
     ports:
       - "${EXECUTOR_PORT:-3009}:${EXECUTOR_PORT:-3009}"
     env_file:
@@ -35,6 +37,7 @@ services:
   btc-treasury:
     build: ./btc-treasury
     container_name: solana-hybrid-btc-treasury
+    # Default port 8090 (override with BTC_TREASURY_PORT env var)
     ports:
       - "${BTC_TREASURY_PORT:-8090}:${BTC_TREASURY_PORT:-8090}"
     env_file:
