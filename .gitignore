@@ -5,6 +5,7 @@ Thumbs.db
 *.bak
 *~
 .idea/
+.claude/
 .vscode/
 .antigravitycli/
 .commandcode/

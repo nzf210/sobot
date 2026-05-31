@@ -1722,5 +1722,13 @@
   {
     "date": "2026-05-31T08:29:24Z",
     "lesson": "[2026-05-31 08:28] Token HCKj8sRyz81k... ditolak karena: Rule Engine: Market cap 5013888.89 SOL exceeds maximum 66000.00 SOL"
+  },
+  {
+    "date": "2026-05-31T08:34:24Z",
+    "lesson": "[2026-05-31 08:32] Token ANM5za4vJz4G... ditolak karena: Zero liquidity (pending graduation)"
+  },
+  {
+    "date": "2026-05-31T08:34:24Z",
+    "lesson": "[2026-05-31 08:32] Token EA6Z5sktKUt1... ditolak karena: Zero liquidity (pending graduation)"
   }
 ]
