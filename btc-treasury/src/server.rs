@@ -120,6 +120,9 @@ async fn market_update(
         treasury,
         open_positions: positions,
         loss_streak,
+        ai_score: None,
+        risk_assessment: None,
+        pair_metrics: None,
     };
 
     let advisory = state.engine.analyze(&input).await;

@@ -208,6 +208,6 @@ BTC Treasury grows → Ready for next position
 | `max_consecutive_losses` | 3     | Pause after this many losses     |
 
 ---
-**Source:** `src/engines/`, `src/indicators.rs`, `src/execution_engine.rs`, `src/engine.rs`
-**Exchange:** Binance Spot only
+**Sources:** `src/engines/`, `src/indicators.rs`, `src/execution_engine.rs`, `src/engine.rs`, `src/models.rs`
+**Exchange:** Binance Spot ONLY
 **Goal:** Continuously grow BTC holdings through disciplined spot trading.

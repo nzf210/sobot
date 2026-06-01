@@ -1,12 +1,10 @@
 mod binance;
 mod config;
-mod crypto;
 mod engines;
 mod engine;
 mod exchange;
 mod execution_engine;
 mod format;
-mod hyperliquid;
 mod indicators;
 mod llm;
 mod memory;
@@ -24,7 +22,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::binance::BinanceClient;
 use crate::exchange::ExchangeClient;
-use crate::hyperliquid::HyperliquidClient;
+use crate::execution_engine::ExecutionEngine;
 use crate::position_monitor::PositionMonitor;
 use crate::scanner::ScannerState;
 
@@ -39,54 +37,31 @@ async fn main() -> std::io::Result<()> {
     // Shared state
     let shared = server::run(&cfg).await?;
 
-    // Exchange client (Binance or Hyperliquid based on config)
+    // Binance Spot only — Hyperliquid support removed. The exchange_name env
+    // var is preserved for forward compatibility but only "binance" is honored.
     let exchange_client: Option<Arc<dyn ExchangeClient>> = if cfg.exchange_api_key.is_empty() || cfg.exchange_api_secret.is_empty() {
         tracing::warn!("Exchange API key/secret not configured — running advisory-only");
         None
+    } else if cfg.exchange_name != "binance" {
+        tracing::error!(
+            "exchange_name='{}' is not supported — btc-treasury is Binance Spot only. \
+             Set EXCHANGE_NAME=binance or unset it.",
+            cfg.exchange_name
+        );
+        None
     } else {
-        match cfg.exchange_name.as_str() {
-            "hyperliquid" => {
-                // Try loading from encrypted file first, then fall back to env vars
-                let enc_path = std::path::Path::new(&cfg.hyperliquid_key_path);
-                let base_url = if cfg.exchange_base_url.is_empty() {
-                    None
-                } else {
-                    Some(cfg.exchange_base_url.clone())
-                };
-
-                let client = if enc_path.exists() && !cfg.wallet_password.is_empty() {
-                    match HyperliquidClient::load_from_encrypted_file(enc_path, &cfg.wallet_password, base_url.clone()) {
-                        Ok((_key, client)) => {
-                            tracing::info!("Hyperliquid: loaded from encrypted file (address: {})", client.api_key_display());
-                            client
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to load hyperliquid.enc: {} — falling back to env vars", e);
-                            HyperliquidClient::new(cfg.exchange_api_key.clone(), cfg.exchange_api_secret.clone(), base_url)
-                        }
-                    }
-                } else {
-                    HyperliquidClient::new(cfg.exchange_api_key.clone(), cfg.exchange_api_secret.clone(), base_url)
-                };
-
-                tracing::info!("Hyperliquid client initialized (address: {})", client.api_key_display());
-                Some(Arc::new(client) as Arc<dyn ExchangeClient>)
-            }
-            _ => {
-                let base_url = if cfg.exchange_base_url.is_empty() {
-                    None
-                } else {
-                    Some(cfg.exchange_base_url.clone())
-                };
-                let client = BinanceClient::new(
-                    cfg.exchange_api_key.clone(),
-                    cfg.exchange_api_secret.clone(),
-                    base_url,
-                );
-                tracing::info!("Binance client initialized (API key: {})", client.api_key_display());
-                Some(Arc::new(client) as Arc<dyn ExchangeClient>)
-            }
-        }
+        let base_url = if cfg.exchange_base_url.is_empty() {
+            None
+        } else {
+            Some(cfg.exchange_base_url.clone())
+        };
+        let client = BinanceClient::new(
+            cfg.exchange_api_key.clone(),
+            cfg.exchange_api_secret.clone(),
+            base_url,
+        );
+        tracing::info!("Binance client initialized (API key: {})", client.api_key_display());
+        Some(Arc::new(client) as Arc<dyn ExchangeClient>)
     };
 
     // Scanner state
@@ -114,8 +89,13 @@ async fn main() -> std::io::Result<()> {
         let interval = cfg.scanner_interval_secs;
         let scanner = Arc::clone(&state);
 
+        let executor = Arc::new(ExecutionEngine::new(
+            Some(Arc::clone(exchange_client.as_ref().unwrap())),
+            mem.clone(),
+        ));
+
         tokio::spawn(async move {
-            scanner::run(scanner, exchange, engine, mem, interval).await;
+            scanner::run(scanner, exchange, engine, executor, mem, interval).await;
         });
 
         Some(state)
@@ -169,8 +149,28 @@ async fn main() -> std::io::Result<()> {
         tracing::warn!("TELEGRAM_BOT_BTC_TOKEN not set — Telegram bot disabled");
     }
 
-    // Keep process alive (server runs in background)
-    loop {
-        tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
-    }
+    // Graceful shutdown: catch SIGINT (Ctrl-C) and SIGTERM (docker stop, kubectl
+    // rolling update). Previously the process held an infinite `sleep(3600)`,
+    // so docker would force-kill after the stop timeout and any in-flight
+    // scanner cycle or atomic-rename could be torn mid-flight.
+    let shutdown = tokio::signal::ctrl_c();
+    #[cfg(unix)]
+    let shutdown = {
+        let ctrl_c = shutdown;
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler");
+        async move {
+            tokio::select! {
+                _ = ctrl_c => "SIGINT",
+                _ = sigterm.recv() => "SIGTERM",
+            }
+        }
+    };
+    let signal = shutdown.await;
+    tracing::info!("Received {} — initiating graceful shutdown", signal);
+    // Give in-flight async tasks a moment to settle, then exit. JSON writes
+    // are atomic so any state already on disk is consistent.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    tracing::info!("BTC Treasury shut down cleanly");
+    Ok(())
 }

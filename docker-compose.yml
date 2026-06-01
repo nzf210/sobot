@@ -43,11 +43,9 @@ services:
     env_file:
       - .env
     volumes:
-      - ./hyperliquid.enc:/app/hyperliquid.enc
       - ./data/btc-treasury:/app/data/btc-treasury
     environment:
-      - HYPERLIQUID_KEY_PATH=/app/hyperliquid.enc
-      - DATA_DIR=/app/data/btc-treasury
+      - DATA_BTC_DIR=/app/data/btc-treasury
       - WALLET_PASSWORD=${WALLET_PASSWORD}
     restart: unless-stopped
     networks:

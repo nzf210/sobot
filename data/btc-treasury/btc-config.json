@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "llm_activation_threshold": 0.75,
   "min_confidence": 0.8,
   "max_exposure": 0.5,
@@ -8,23 +8,17 @@
   "safe_mode_volatility": 9.0,
   "safe_mode_drawdown": 0.05,
   "scanner_pairs": [
-    "BTC",
-    "ETH",
-    "SOL",
-    "POL",
-    "BAT",
-    "KAS",
-    "BTCUSDT",
-    "BTC-PERP"
+    "BTCUSDT"
   ],
-  "take_profit_pct": 20.0,
-  "stop_loss_pct": -10.0,
-  "trailing_tp_pct": 12.0,
-  "use_trailing": false,
+  "take_profit_pct": 4.0,
+  "stop_loss_pct": -0.8,
+  "trailing_tp_pct": 3.0,
+  "use_trailing": true,
   "max_positions": 1,
   "risk_per_trade_pct": 0.01,
   "initial_capital_usdt": 50.0,
   "min_score_threshold": 80.0,
   "compound_pct": 0.5,
-  "treasury_pct": 0.5
+  "treasury_pct": 0.5,
+  "taker_fee_pct": 0.001
 }

@@ -7,8 +7,10 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
 use crate::engine::AdvisoryEngine;
+use crate::engines::risk_manager::RiskManager;
 use crate::exchange::ExchangeClient;
 use crate::format::{bot_send_plain, escape_mdv2, send_mdv2_safe};
+use crate::indicators::Indicators;
 use crate::memory::MemoryStore;
 use crate::models::*;
 use crate::position_monitor::record_position_from_advisory;
@@ -211,16 +213,31 @@ impl BtcBot {
     // ── routing ────────────────────────────────────────────────────────────
 
     fn is_whitelisted(&self, user_id: i64) -> bool {
-        self.whitelist.is_empty() || self.whitelist.contains(&user_id)
+        // SEC-CRITICAL: empty whitelist = NOBODY can run trading commands.
+        // Previously the empty case returned `true` (allow all) — combined with
+        // a missing TELEGRAM_WHITELIST_USER_BTC_IDS env var, that gave any
+        // Telegram user full control of /btc_buy, /btc_sell, /btc_closeall.
+        // /btc_help and /btc_skills remain public for discoverability.
+        if self.whitelist.is_empty() {
+            tracing::warn!(
+                "TELEGRAM_WHITELIST_USER_BTC_IDS is empty — denying all trading commands. \
+                 Set the env var to your chat ID to allow access."
+            );
+            return false;
+        }
+        self.whitelist.contains(&user_id)
+    }
+
+    /// Commands that should remain accessible even when the whitelist is empty,
+    /// so operators can discover the bot and read its docs without a configured
+    /// whitelist. The whitelist check happens BEFORE command routing in
+    /// `handle_message`; the `is_public` flag here is for the *help*/*skills* route.
+    fn is_public_command(cmd: &str) -> bool {
+        matches!(cmd, "help" | "btcskills" | "start")
     }
 
     async fn handle_message(&self, bot: &Bot, msg: &Message, text: &str) {
         let user_id = msg.chat.id.0;
-        if !self.is_whitelisted(user_id) {
-            let _ = bot.send_message(msg.chat.id, "⛔ Unauthorized").await;
-            return;
-        }
-
         let text = text.trim();
         let (cmd, args) = if let Some(rest) = text.strip_prefix('/') {
             let parts: Vec<&str> = rest.splitn(2, |c: char| c.is_whitespace()).collect();
@@ -231,6 +248,13 @@ impl BtcBot {
         } else {
             return;
         };
+
+        // Public commands (help, skills) work even when not whitelisted so
+        // operators can discover the bot. Everything else requires whitelist.
+        if !self.is_whitelisted(user_id) && !Self::is_public_command(&cmd) {
+            let _ = bot.send_message(msg.chat.id, "⛔ Unauthorized — set TELEGRAM_WHITELIST_USER_BTC_IDS to allow access").await;
+            return;
+        }
 
         let result = match cmd.as_str() {
             "help" => self.cmd_help(bot, msg).await,
@@ -420,6 +444,9 @@ impl BtcBot {
             treasury,
             open_positions: positions,
             loss_streak: 0,
+            ai_score: None,
+            risk_assessment: None,
+            pair_metrics: None,
         };
 
         let advisory = self.engine.analyze(&input).await;
@@ -1259,6 +1286,9 @@ impl BtcBot {
                 treasury: ts,
                 open_positions: self.mem.get_positions(),
                 loss_streak: 0,
+                ai_score: None,
+                risk_assessment: None,
+                pair_metrics: None,
             }).await;
             let current_price = exchange.get_current_price(&pair).await.unwrap_or(0.0);
             record_position_from_advisory(&*self.mem, &advisory, current_price, size, &pair, "buy");
@@ -1293,13 +1323,38 @@ impl BtcBot {
             treasury,
             open_positions: positions,
             loss_streak,
+            ai_score: None,
+            risk_assessment: None,
+            pair_metrics: None,
         };
 
-        let advisory = self.engine.analyze(&input).await;
+        let mut advisory = self.engine.analyze(&input).await;
+
+        // ATR-based SL clamping: fetch 15m klines, compute ATR, widen SL if too tight
         let current_price = match exchange.get_current_price(&pair).await {
             Ok(p) => p,
             Err(_) => 0.0,
         };
+        if current_price > 0.0 {
+            if let Ok(candles) = exchange.get_klines(&pair, "15m", 200).await {
+                let atr_14 = Indicators::atr(&candles, 14);
+                let clamped_sl = RiskManager::clamp_sl(advisory.dynamic_stop_loss, current_price, atr_14);
+                if clamped_sl != advisory.dynamic_stop_loss {
+                    let tp_sl_ratio = if advisory.dynamic_stop_loss != 0.0 {
+                        (advisory.dynamic_take_profit / advisory.dynamic_stop_loss.abs()).max(2.0)
+                    } else {
+                        3.0
+                    };
+                    advisory.dynamic_stop_loss = clamped_sl;
+                    advisory.dynamic_take_profit = clamped_sl.abs() * tp_sl_ratio;
+                    advisory.sl_reason = format!("{} (ATR clamp: {:.1}% min)", advisory.sl_reason, -clamped_sl);
+                    tracing::info!(
+                        "cmd_buy [{}]: clamped SL to {:.1}% (ATR_14={:.6})",
+                        pair, clamped_sl, atr_14
+                    );
+                }
+            }
+        }
 
         // Place market buy on Binance
         match exchange.place_market_buy(&pair, size).await {
@@ -1377,13 +1432,17 @@ impl BtcBot {
         if cfg.dry_run {
             let mut results: Vec<String> = Vec::new();
             for pos in &positions {
-                self.mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size);
-                let lesson = format!(
-                    "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Manual close via /btc_sell.",
-                    pos.id, pos.pnl_btc, pos.size
-                );
-                self.mem.add_lesson(lesson);
-                results.push(format!("{} — PnL: {:.2}%", escape_mdv2(&pos.id), pos.pnl_btc));
+                let btc_price = btc_price_for_conversion(exchange.as_ref(), &pos.id).await;
+                if self.mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size, btc_price) {
+                    let lesson = format!(
+                        "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Manual close via /btc_sell.",
+                        pos.id, pos.pnl_btc, pos.size
+                    );
+                    self.mem.add_lesson(lesson);
+                    results.push(format!("{} — PnL: {:.2}%", escape_mdv2(&pos.id), pos.pnl_btc));
+                } else {
+                    results.push(format!("{} — DRY RUN close recorded (treasury not updated: missing BTC price)", escape_mdv2(&pos.id)));
+                }
             }
             self.mem.save_positions(&[]);
             let text = format!("🧪 *DRY RUN — Simulated Close All*\n\n{}", results.join("\n"));
@@ -1402,7 +1461,10 @@ impl BtcBot {
             match exchange.place_market_sell(pair, size).await {
                 Ok(result) => {
                     let position_value_usdt = pos.entry_price * size;
-                    self.mem.update_treasury_on_close(pair, pos.pnl_btc, position_value_usdt);
+                    let btc_price = btc_price_for_conversion(exchange.as_ref(), pair).await;
+                    if !self.mem.update_treasury_on_close(pair, pos.pnl_btc, position_value_usdt, btc_price) {
+                        tracing::error!("{} closed on exchange but treasury update skipped — missing BTCUSDT price", pair);
+                    }
 
                     let lesson = format!(
                         "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Manual close via /btc_sell. TP: {:.1}%, SL: {:.1}%",
@@ -1482,12 +1544,16 @@ impl BtcBot {
 
         let cfg = self.mem.get_config();
         if cfg.dry_run {
-            self.mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size);
-            let lesson = format!(
-                "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Manual close via /btc_close. TP: {:.1}%, SL: {:.1}%",
-                pair, pnl_pct, size, pos.take_profit_pct, pos.stop_loss_pct
-            );
-            self.mem.add_lesson(lesson);
+            let btc_price = btc_price_for_conversion(exchange.as_ref(), &pair).await;
+            if self.mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size, btc_price) {
+                let lesson = format!(
+                    "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Manual close via /btc_close. TP: {:.1}%, SL: {:.1}%",
+                    pair, pnl_pct, size, pos.take_profit_pct, pos.stop_loss_pct
+                );
+                self.mem.add_lesson(lesson);
+            } else {
+                tracing::error!("DRY RUN close for {} — treasury update skipped (missing BTC price)", pair);
+            }
             positions.remove(idx);
             self.mem.save_positions(&positions);
             send_mdv2_safe(
@@ -1500,7 +1566,10 @@ impl BtcBot {
         let _ = exchange.cancel_all(&pair).await;
         match exchange.place_market_sell(&pair, size).await {
             Ok(result) => {
-                self.mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size);
+                let btc_price = btc_price_for_conversion(exchange.as_ref(), &pair).await;
+                if !self.mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size, btc_price) {
+                    tracing::error!("{} closed on exchange but treasury update skipped — missing BTCUSDT price", pair);
+                }
                 let lesson = format!(
                     "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Manual close via /btc_close. TP: {:.1}%, SL: {:.1}%",
                     pair, pnl_pct, size, pos.take_profit_pct, pos.stop_loss_pct
@@ -1554,13 +1623,17 @@ impl BtcBot {
 
         if cfg.dry_run {
             for pos in &positions {
-                self.mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size);
-                let lesson = format!(
-                    "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Force closeall.",
-                    pos.id, pos.pnl_btc, pos.size
-                );
-                self.mem.add_lesson(lesson);
-                results.push(format!("🧪 {} — DRY RUN close | PnL: {:.2}%", escape_mdv2(&pos.id), pos.pnl_btc));
+                let btc_price = btc_price_for_conversion(exchange.as_ref(), &pos.id).await;
+                if self.mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size, btc_price) {
+                    let lesson = format!(
+                        "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Force closeall.",
+                        pos.id, pos.pnl_btc, pos.size
+                    );
+                    self.mem.add_lesson(lesson);
+                    results.push(format!("🧪 {} — DRY RUN close | PnL: {:.2}%", escape_mdv2(&pos.id), pos.pnl_btc));
+                } else {
+                    results.push(format!("⚠️ {} — DRY RUN close recorded (treasury not updated: missing BTC price)", escape_mdv2(&pos.id)));
+                }
             }
             self.mem.save_positions(&[]);
             let text = format!("🧪 *DRY RUN — Force Close All*\n\n{}", results.join("\n"));
@@ -1574,7 +1647,10 @@ impl BtcBot {
             let _ = exchange.cancel_all(pair).await;
             match exchange.place_market_sell(pair, size).await {
                 Ok(result) => {
-                    self.mem.update_treasury_on_close(pair, pos.pnl_btc, pos.entry_price * size);
+                    let btc_price = btc_price_for_conversion(exchange.as_ref(), pair).await;
+                    if !self.mem.update_treasury_on_close(pair, pos.pnl_btc, pos.entry_price * size, btc_price) {
+                        tracing::error!("{} closed on exchange but treasury update skipped — missing BTCUSDT price", pair);
+                    }
                     let lesson = format!(
                         "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Force closeall.",
                         pair, pos.pnl_btc, size
@@ -1649,6 +1725,27 @@ impl BtcBot {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Compute the BTC price to pass to `update_treasury_on_close` for a given pair.
+/// For BTC-quote pairs (SOLBTC, ETHBTC) PnL is already in BTC, so we pass 1.0
+/// (the function treats 1.0 as the BTC-quote sentinel). For USDT-quote pairs
+/// (BTCUSDT) we fetch the live BTCUSDT price so USDT profit converts to BTC
+/// correctly. Returns 0.0 on fetch failure — caller should skip the treasury
+/// update rather than write a corrupt value.
+async fn btc_price_for_conversion(exchange: &dyn ExchangeClient, pair: &str) -> f64 {
+    let upper = pair.to_uppercase();
+    if upper.ends_with("BTC") && upper != "BTCUSDT" {
+        return 1.0;
+    }
+    match exchange.get_current_price(pair).await {
+        Ok(p) if p > 0.0 => p,
+        Ok(_) => 0.0,
+        Err(e) => {
+            tracing::warn!("btc_price_for_conversion({}): failed to fetch BTCUSDT price: {}", pair, e);
+            0.0
+        }
+    }
+}
 
 fn default_market_data() -> BtcMarketData {
     BtcMarketData {

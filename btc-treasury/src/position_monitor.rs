@@ -141,12 +141,14 @@ impl PositionMonitor {
 
                 if cfg.dry_run {
                     // Dry run: simulate close without calling exchange
-                    let position_value_usdt = entry * position_size;
-                    self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value_usdt);
-                    tracing::info!(
-                        "[DRY RUN] Position {} simulated close: PnL {:.2}%",
-                        pair_id, pnl_pct
-                    );
+                    let position_value = entry * position_size;
+                    // For BTC-quote pairs (SOLBTC): btc_price=1.0 signals PnL already in BTC
+                    let btc_price_for_conversion = if pair_id.to_uppercase().ends_with("BTC") && pair_id.to_uppercase() != "BTCUSDT" {
+                        1.0
+                    } else {
+                        current_price
+                    };
+                    self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value, btc_price_for_conversion);
                 } else {
                     // Live: execute market sell to close the position
                     let close_result = exchange.place_market_sell(&pair_id, position_size).await;
@@ -157,8 +159,13 @@ impl PositionMonitor {
                                 pair_id, result.order_id, result.status
                             );
                             // Update BTC treasury with realized PnL
-                            let position_value_usdt = entry * position_size;
-                            self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value_usdt);
+                            let position_value = entry * position_size;
+                            let btc_price_for_conversion = if pair_id.to_uppercase().ends_with("BTC") && pair_id.to_uppercase() != "BTCUSDT" {
+                                1.0
+                            } else {
+                                current_price
+                            };
+                            self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value, btc_price_for_conversion);
                         }
                         Err(e) => {
                             tracing::error!("Failed to execute market sell for {}: {}", pair_id, e);
@@ -200,6 +207,28 @@ impl PositionMonitor {
                     stop_loss_pct
                 );
                 self.mem.add_lesson(lesson);
+
+                // Auto-pause on consecutive losses
+                {
+                    let mut treasury = self.mem.get_treasury_state();
+                    if pnl_pct <= 0.0 {
+                        treasury.consecutive_losses += 1;
+                        treasury.losing_trades += 1;
+                        let cfg = self.mem.get_config();
+                        if treasury.consecutive_losses >= cfg.max_consecutive_losses {
+                            let pause_until = chrono::Utc::now() + chrono::Duration::hours(24);
+                            treasury.trading_paused_until = pause_until.to_rfc3339();
+                            tracing::warn!(
+                                "BTC AUTO-PAUSE: {} consecutive losses — trading paused until {}",
+                                treasury.consecutive_losses, pause_until.format("%Y-%m-%d %H:%M UTC")
+                            );
+                        }
+                    } else {
+                        treasury.winning_trades += 1;
+                        treasury.consecutive_losses = 0; // reset loss streak on win
+                    }
+                    self.mem.save_treasury_state(treasury);
+                }
 
                 // Remove from positions
                 positions.remove(i);

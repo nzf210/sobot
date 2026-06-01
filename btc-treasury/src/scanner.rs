@@ -6,9 +6,18 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
 use crate::engine::AdvisoryEngine;
-use crate::exchange::{ExchangeClient, ExchangeOrderResult};
+use crate::engines::ai_scoring::AIScoringEngine;
+use crate::engines::risk_manager::RiskManager;
+use crate::execution_engine::ExecutionEngine;
+use crate::exchange::{ExchangeClient};
+use crate::indicators::Indicators;
 use crate::memory::MemoryStore;
 use crate::models::*;
+
+/// Returns true if pair is a BTC-quote pair (SOLBTC, ETHBTC), not BTCUSDT.
+fn is_btc_quote_pair(pair: &str) -> bool {
+    pair.to_uppercase().ends_with("BTC") && pair.to_uppercase() != "BTCUSDT"
+}
 
 #[derive(Debug, Clone)]
 pub struct RecentDecision {
@@ -188,6 +197,7 @@ pub async fn run(
     state: Arc<ScannerState>,
     exchange: Arc<dyn ExchangeClient>,
     engine: Arc<AdvisoryEngine>,
+    executor: Arc<ExecutionEngine>,
     mem: Arc<MemoryStore>,
     interval_secs: u64,
 ) {
@@ -204,7 +214,7 @@ pub async fn run(
 
         for pair in &pairs {
             if let Some(ps) = state.get_pair_state(pair).await {
-                scan_pair(&state, pair, &ps, &*exchange, &engine, &mem).await;
+                scan_pair(&state, pair, &ps, &*exchange, &engine, &executor, &mem).await;
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
         }
@@ -217,6 +227,7 @@ async fn scan_pair(
     ps: &PairState,
     exchange: &dyn ExchangeClient,
     engine: &AdvisoryEngine,
+    executor: &ExecutionEngine,
     mem: &MemoryStore,
 ) {
     ps.stats.scanned.fetch_add(1, Ordering::Relaxed);
@@ -253,16 +264,32 @@ async fn scan_pair(
     }
 
     let stored_positions = mem.get_positions();
-    let loss_streak = {
-        let mut streak = 0;
-        for pos in stored_positions.iter().rev() {
-            if pos.pnl_btc < 0.0 {
-                streak += 1;
-            } else {
-                break;
-            }
+    let loss_streak = treasury.consecutive_losses;
+
+    // Fetch OHLCV and compute AI technical scoring for better advisory
+    let (ai_score, risk_info, pair_metrics) = match exchange.get_klines(pair, "15m", 200).await {
+        Ok(candles_15m) if candles_15m.len() > 50 => {
+            // Fetch longer timeframe candles
+            let candles_1h = exchange.get_klines(pair, "1h", 50).await.unwrap_or_default();
+            let candles_4h = exchange.get_klines(pair, "4h", 50).await.unwrap_or_default();
+            let btc_15m = exchange.get_klines("BTCUSDT", "15m", 200).await.unwrap_or_default();
+
+            let metrics = compute_pair_metrics(&candles_15m, &candles_1h, &candles_4h, &btc_15m, pair);
+            let risk_assessment = RiskManager::assess(
+                &treasury,
+                mem.get_positions().len() as i32,
+                loss_streak,
+                treasury.usdt_balance * treasury.btc_growth_7d.max(0.0),
+                treasury.usdt_balance,
+                &config,
+            );
+            let scoring = AIScoringEngine::score_pair(&metrics, &risk_assessment);
+            (Some(scoring.score), Some(risk_assessment), Some(metrics))
         }
-        streak
+        _ => {
+            tracing::debug!("Scanner [{}]: insufficient OHLCV data, using orderbook-only scoring", pair);
+            (None, None, None)
+        }
     };
 
     let input = BtcAdvisoryInput {
@@ -270,9 +297,12 @@ async fn scan_pair(
         treasury: treasury.clone(),
         open_positions: open_orders,
         loss_streak,
+        ai_score,
+        risk_assessment: risk_info,
+        pair_metrics: pair_metrics.clone(),
     };
 
-    let advisory = engine.analyze(&input).await;
+    let mut advisory = engine.analyze(&input).await;
 
     *ps.last_regime.write().await = advisory.market_regime.clone();
     *ps.last_recommendation.write().await = advisory.recommendation.clone();
@@ -283,6 +313,92 @@ async fn scan_pair(
     match advisory.recommendation.as_str() {
         "APPROVE" => {
             ps.stats.advisory_approve.fetch_add(1, Ordering::Relaxed);
+
+            // Execute the approved trade
+            let cfg = mem.get_config();
+            let positions = mem.get_positions();
+
+            // Check if we can open a new position
+            let can_trade = positions.len() < cfg.max_positions as usize
+                && treasury.trading_paused_until.is_empty();
+
+            if can_trade {
+                let capital = match executor.get_available_capital(pair).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!("Scanner [{}]: failed to get capital: {}", pair, e);
+                        0.0
+                    }
+                };
+
+                let current_price = exchange.get_current_price(pair).await.unwrap_or(0.0);
+                let quote_asset = if is_btc_quote_pair(pair) { "BTC" } else { "USDT" };
+
+                // Clamp SL: use ATR-based minimum width to prevent SL from being too tight
+                let clamped_sl = if let Some(ref pm) = pair_metrics {
+                    let close = if pm.close_15m > 0.0 { pm.close_15m } else { current_price };
+                    RiskManager::clamp_sl(advisory.dynamic_stop_loss, close, pm.atr_14)
+                } else {
+                    RiskManager::min_sl_from_atr(current_price, 0.0) // floor only (0.8%)
+                };
+                if clamped_sl != advisory.dynamic_stop_loss {
+                    tracing::info!(
+                        "Scanner [{}]: clamped SL from {:.1}% to {:.1}% (ATR_14={:.6}, close={:.6})",
+                        pair, advisory.dynamic_stop_loss, clamped_sl, pair_metrics.as_ref().map(|pm| pm.atr_14).unwrap_or(0.0), current_price
+                    );
+                    // Also widen TP proportionally to keep risk/reward >= 2:1
+                    let tp_sl_ratio = if advisory.dynamic_stop_loss != 0.0 {
+                        (advisory.dynamic_take_profit / advisory.dynamic_stop_loss.abs()).max(2.0)
+                    } else {
+                        3.0
+                    };
+                    advisory.dynamic_stop_loss = clamped_sl;
+                    advisory.dynamic_take_profit = clamped_sl.abs() * tp_sl_ratio;
+                    advisory.tp_reason = format!("{} (wider SL due to ATR clamp)", advisory.tp_reason);
+                    advisory.sl_reason = format!("{} (ATR clamp: {:.1}% min)", advisory.sl_reason, -clamped_sl);
+                }
+
+                let position_value = if capital > 0.0 && advisory.dynamic_stop_loss < 0.0 {
+                    RiskManager::calc_position_size(
+                        capital,
+                        current_price,
+                        advisory.dynamic_stop_loss,
+                        cfg.risk_per_trade_pct,
+                        cfg.taker_fee_pct,
+                    )
+                } else {
+                    0.0
+                };
+
+                if position_value > 0.0 {
+                    if cfg.dry_run {
+                        tracing::info!(
+                            "[DRY RUN] Scanner [{}]: APPROVE — would execute BUY with {:.2} {} at score {:.0}%",
+                            pair, position_value, quote_asset, advisory.opportunity_score
+                        );
+                    } else {
+                        match executor.execute_buy(pair, position_value, &advisory).await {
+                            Ok(plan) => {
+                                let qty = if plan.entry_price > 0.0 { position_value / plan.entry_price } else { 0.0 };
+                                tracing::info!(
+                                    "Scanner [{}]: BUY executed — {} {:.8} (value {:.2} {}) (TP:{:.1}%, SL:{:.1}%)",
+                                    pair, plan.pair, qty, position_value, quote_asset, plan.tp_pct, plan.sl_pct
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!("Scanner [{}]: BUY execution failed: {}", pair, e);
+                            }
+                        }
+                    }
+                } else {
+                    tracing::warn!("Scanner [{}]: APPROVE but zero position_value computed (capital={:.2} {})", pair, capital, quote_asset);
+                }
+            } else {
+                tracing::debug!(
+                    "Scanner [{}]: APPROVE blocked — positions={}/{} paused={}",
+                    pair, positions.len(), cfg.max_positions, !treasury.trading_paused_until.is_empty()
+                );
+            }
         }
         "MONITOR" => {
             ps.stats.advisory_monitor.fetch_add(1, Ordering::Relaxed);
@@ -336,5 +452,81 @@ async fn scan_pair(
             advisory.reason
         );
         mem.add_lesson(lesson);
+    }
+}
+
+/// Compute PairMetrics from OHLCV candles for AI scoring engines
+fn compute_pair_metrics(
+    candles_15m: &[Ohlcv],
+    candles_1h: &[Ohlcv],
+    candles_4h: &[Ohlcv],
+    btc_15m: &[Ohlcv],
+    pair: &str,
+) -> PairMetrics {
+    let close_15m = candles_15m.last().map(|c| c.close).unwrap_or(0.0);
+    let close_1h = candles_1h.last().map(|c| c.close).unwrap_or(0.0);
+    let close_4h = candles_4h.last().map(|c| c.close).unwrap_or(0.0);
+
+    let volume_15m = candles_15m.last().map(|c| c.volume).unwrap_or(0.0);
+    let volume_1h = candles_1h.last().map(|c| c.volume).unwrap_or(0.0);
+    let volume_4h = candles_4h.last().map(|c| c.volume).unwrap_or(0.0);
+
+    let atr_14 = Indicators::atr(candles_15m, 14);
+    let rsi_14 = Indicators::rsi(candles_15m, 14);
+    let ema_20 = Indicators::ema20(candles_15m);
+    let ema_50 = Indicators::ema50(candles_15m);
+    let ema_200 = Indicators::ema200(candles_15m);
+    let (macd_line, macd_signal, macd_histogram) = Indicators::macd(candles_15m);
+    let vwap = Indicators::vwap(candles_15m);
+
+    let coin_ret_15m = Indicators::return_since(candles_15m, 1);
+    let coin_ret_1h = Indicators::return_since(candles_1h, 1);
+    let coin_ret_4h = Indicators::return_since(candles_4h, 1);
+    let coin_ret_1d = Indicators::return_since(candles_4h, 6);
+
+    let btc_ret_15m = Indicators::return_since(btc_15m, 1);
+    let btc_ret_1h = Indicators::return_since(btc_15m, 4);
+    let btc_ret_4h = Indicators::return_since(btc_15m, 16);
+    let btc_ret_1d = Indicators::return_since(btc_15m, 96);
+
+    let rs_15m = (coin_ret_15m - btc_ret_15m) * 100.0;
+    let rs_1h = (coin_ret_1h - btc_ret_1h) * 100.0;
+    let rs_4h = (coin_ret_4h - btc_ret_4h) * 100.0;
+    let rs_1d = (coin_ret_1d - btc_ret_1d) * 100.0;
+    let rs_score = rs_15m * 0.35 + rs_1h * 0.30 + rs_4h * 0.25 + rs_1d * 0.10;
+
+    let volume_growth = Indicators::volume_growth(candles_15m, 20);
+    let atr_expansion = if atr_14 > 0.0 {
+        let prev_atr = Indicators::atr(&candles_15m[..candles_15m.len().saturating_sub(1)], 14);
+        if prev_atr > 0.0 { (atr_14 - prev_atr) / prev_atr } else { 0.0 }
+    } else { 0.0 };
+
+    let ema_bullish_alignment = ema_20 > ema_50 && ema_50 > ema_200;
+    let macd_bullish = macd_line > macd_signal && macd_histogram > 0.0;
+    let volume_spike = volume_growth > 1.0;
+    let volume_expansion = Indicators::is_volume_expansion(candles_15m, candles_1h, candles_4h);
+    let low_liquidity = candles_15m.iter().rev().take(10).map(|c| c.volume).sum::<f64>() < 10.0;
+    let wide_spread = false; // computed from orderbook in engine.rs, not here
+
+    PairMetrics {
+        pair: pair.to_string(),
+        close_15m, close_1h, close_4h, close_1d: close_1h,
+        volume_15m, volume_1h, volume_4h, volume_1d: volume_1h,
+        atr_14, atr_atr: atr_14,
+        rsi_14, ema_20, ema_50, ema_200,
+        macd_line, macd_signal, macd_histogram,
+        vwap,
+        bid_depth: 0.0, ask_depth: 0.0, spread_pct: 0.0,
+        btc_return_15m: btc_ret_15m,
+        btc_return_1h: btc_ret_1h,
+        btc_return_4h: btc_ret_4h,
+        btc_return_1d: btc_ret_1d,
+        rs_15m, rs_1h, rs_4h, rs_1d, rs_score,
+        volume_growth, atr_expansion,
+        ema_bullish_alignment, macd_bullish,
+        volume_spike, volume_expansion,
+        liquidity_growth: volume_growth > 0.0,
+        wash_trade_detected: false,
+        low_liquidity, wide_spread,
     }
 }

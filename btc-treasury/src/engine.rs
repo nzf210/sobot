@@ -24,9 +24,39 @@ TRADING PHILOSOPHY:
 - Universe: BTC-quote pairs (ETHBTC, SOLBTC, SUIBTC, ADABTC, LINKBTC, dll)
 - Score > 80 → AMBIL POSISI. Score < 80 → DO NOTHING. Cash is a position.
 - Maksimum 1 posisi aktif.
-- Maksimum 1% risiko per trade.
+- Maksimum 1% risiko per trade (after fees).
 - Take Profit: 3-8%. Stop Loss: 1-2%.
 - TP > |SL| — selalu maintain positive expected value per trade.
+
+FEE-AWARE STOP-LOSS:
+- Taker fee 0.1% per trade → round-trip fee 0.2%.
+- SL must absorb fee: effective_loss = |SL%| + 0.2%.
+- So if config says max 1% risk, set SL at -0.8% → actual max loss = 0.8% + 0.2% = 1.0%.
+- For small capital (<$100): set wider TP-to-SL ratio (at least 3:1) to survive fees.
+- SL minimum depth: at least 0.5% below entry after fees (0.7% absolute SL).
+
+DYNAMIC TP/SL (set based on market regime + volatility):
+When recommending APPROVE, you MUST set conservative yet profitable levels:
+
+- CALM/RANGING market (volatility low, tight spread):
+  TP: 2.5-4%, SL: -0.8% to -1.2%  (smaller moves, tighter SL)
+
+- TRENDING market (momentum, breakout):
+  TP: 4-7%, SL: -1.2% to -1.8%  (ride trend, wider room)
+
+- VOLATILE market (high ATR, wide swing):
+  TP: 6-10%, SL: -1.8% to -2.5%  (need wider targets to survive swings)
+
+- For positions with small BTC capital (≤0.001 BTC):
+  Use upper TP range and minimum SL depth (wider TP/SL) — fees eat smaller percentage moves faster.
+
+TP/SL RATIONALE:
+- dynamic_take_profit: 3.0 to 10.0 (percentage)
+- dynamic_stop_loss: -0.7 to -2.5 (negative percentage, always considering 0.2% fee)
+- tp_reason: specific to regime, price level, and volatility
+- sl_reason: must mention fee consideration + support/resistance level
+- IMPORTANT: The system will automatically widen your SL if it's tighter than 1.5× ATR(14) — ATR is the average 15m noise range. Choose the regime-appropriate range above and the clamp will protect each trade from random noise.
+- When ATR is high (>3%), your SL at -0.7% will be automatically widened to ~-3.0% — the TP will scale up proportionally to maintain positive expectancy.
 
 ENTRY CONDITIONS (semua harus terpenuhi):
 - RS (Relative Strength) Rising: coin outperform BTC
@@ -35,9 +65,9 @@ ENTRY CONDITIONS (semua harus terpenuhi):
 - Volume > Average (volume spike / expansion)
 
 EXIT CONDITIONS:
-- Take Profit: 3-8% (dynamic based on regime)
+- Take Profit: dynamic TP based on regime
 - Trailing Stop: aktif (track highest price)
-- Stop Loss: 1-2% (hard limit)
+- Stop Loss: dynamic SL (hard limit, fee-aware)
 
 ANTI-FOMO RULES:
 - Dilarang: Martingale, Averaging Down, Revenge Trading, YOLO Trade, All-In
@@ -70,13 +100,6 @@ STRICT PROHIBITIONS:
 - Never recommend futures/perpetual trading
 - Never measure success in USD
 
-DYNAMIC TP/SL:
-When recommending APPROVE, you MUST set:
-- dynamic_take_profit: 3.0 to 8.0 (percentage)
-- dynamic_stop_loss: -1.0 to -2.0 (negative percentage)
-- tp_reason: brief reason
-- sl_reason: brief reason
-
 ALWAYS OUTPUT VALID JSON. NO MARKDOWN. NO TEXT OUTSIDE JSON.
 
 Required output structure:
@@ -90,9 +113,9 @@ Required output structure:
   "reason": "Strong RS + Volume spike + EMA alignment.",
   "warnings": [],
   "dynamic_take_profit": 5.5,
-  "dynamic_stop_loss": -1.5,
-  "tp_reason": "Moderate momentum, 5.5% TP captures move without being too greedy",
-  "sl_reason": "1.5% SL respects 1% max risk rule with room for noise"
+  "dynamic_stop_loss": -1.2,
+  "tp_reason": "TRENDING regime - 5.5% TP captures momentum move above 4h resistance",
+  "sl_reason": "1.2% SL + 0.2% fee = 1.4% max loss, below 1.5% support level on 15m"
 }"#;
 
 
@@ -108,15 +131,25 @@ impl AdvisoryEngine {
     }
 
     pub async fn analyze(&self, input: &BtcAdvisoryInput) -> FullBtcAdvisory {
-        let cfg = self.mem.get_config();
+        let config = self.mem.get_config();
         let market_regime = classify_regime(&input.market_data);
         let (risk_level, warnings) = assess_risk(&input.market_data, &input.treasury, input.loss_streak);
         let treasury_mode = treasury_mode(&input.market_data, &input.treasury, &risk_level);
-        let opportunity_score = opportunity_score(&input.market_data);
 
-        let should_activate = should_activate_llm(&input.market_data, &input.treasury, input.loss_streak, &cfg);
+        // Blend AI score with orderbook-based opportunity score
+        let orderbook_score = opportunity_score(&input.market_data);
+        let opportunity_score = match input.ai_score {
+            Some(ai) if ai > 0.0 => {
+                let ai_weight = 0.6;
+                let ob_weight = 0.4;
+                (ai * ai_weight + orderbook_score * ob_weight).round().clamp(0.0, 100.0)
+            }
+            _ => orderbook_score,
+        };
 
-        if should_activate && cfg.enabled {
+        let should_activate = should_activate_llm(&input.market_data, &input.treasury, input.loss_streak, &config);
+
+        if should_activate && config.enabled {
             tracing::info!("BTC Advisory: activating LLM");
             match self.call_llm(input, &market_regime, &risk_level, &warnings, opportunity_score, &treasury_mode).await {
                 Ok(mut advisory) => {
@@ -131,7 +164,7 @@ impl AdvisoryEngine {
             }
         }
 
-        quant_advisory(&input.market_data, &market_regime, &risk_level, &warnings, opportunity_score, &treasury_mode)
+        quant_advisory(&input.market_data, &market_regime, &risk_level, &warnings, opportunity_score, &treasury_mode, config.taker_fee_pct)
     }
 
     async fn call_llm(
@@ -143,8 +176,14 @@ impl AdvisoryEngine {
         opportunity_score: f64,
         treasury_mode: &str,
     ) -> anyhow::Result<FullBtcAdvisory> {
+        let config = self.mem.get_config();
         let warnings_json = serde_json::to_string(warnings).unwrap_or_default();
         let positions_json = serde_json::to_string(&input.open_positions).unwrap_or_default();
+
+        let ai_score_line = input.ai_score.map(|s| format!("AI Technical Score: {:.1}\n", s)).unwrap_or_default();
+        let pair_metrics_json = input.pair_metrics.as_ref()
+            .map(|pm| serde_json::to_string(pm).unwrap_or_default())
+            .unwrap_or_default();
 
         let user_prompt = format!(
             r#"CURRENT STATE:
@@ -161,6 +200,9 @@ Quant Confidence: {:.2}
 Active Strategy: {}
 Portfolio Exposure: {:.2}
 Daily Drawdown: {:.4}
+Taker Fee: {:.2}% (round-trip: {:.2}%)
+{}TECHNICAL INDICATORS:
+{}
 
 TREASURY:
 Current BTC: {:.8}
@@ -190,6 +232,10 @@ Warnings: {}"#,
             input.market_data.active_strategy,
             input.market_data.portfolio_exposure,
             input.market_data.daily_drawdown,
+            config.taker_fee_pct * 100.0,
+            config.taker_fee_pct * 200.0,
+            ai_score_line,
+            pair_metrics_json,
             input.treasury.current_btc,
             input.treasury.previous_btc,
             input.treasury.btc_growth_7d,
@@ -379,7 +425,13 @@ fn quant_advisory(
     warnings: &[String],
     opportunity: f64,
     treasury_mode: &str,
+    taker_fee_pct: f64,
 ) -> FullBtcAdvisory {
+    let round_trip_fee_pct = taker_fee_pct * 200.0; // 0.2%
+    // Quant fallback SL: base 0.8% + round-trip fee, capped at 2.0%
+    let base_sl = 0.8;
+    let quant_sl = -((base_sl + round_trip_fee_pct).clamp(0.8, 2.0));
+
     let (recommendation, reason) = match risk_level {
         "CRITICAL" => (
             "ENABLE_SAFE_MODE",
@@ -426,9 +478,9 @@ fn quant_advisory(
         opportunity_score: opportunity,
         bypass_quant: false,
         timestamp: chrono::Utc::now().to_rfc3339(),
-        dynamic_take_profit: 20.0,   // quant fallback default
-        dynamic_stop_loss: -10.0,    // quant fallback default
-        tp_reason: "Default quant fallback".to_string(),
-        sl_reason: "Default quant fallback".to_string(),
+        dynamic_take_profit: 5.5,    // quant fallback: conservative default
+        dynamic_stop_loss: quant_sl, // fee-aware: base SL + round-trip fee
+        tp_reason: format!("Quant fallback: default 5.5% TP ({:.1}% fee-adjusted SL)", -quant_sl),
+        sl_reason: format!("Quant fallback: {:.1}% SL + {:.1}% fee = {:.1}% max loss", base_sl, round_trip_fee_pct, base_sl + round_trip_fee_pct),
     }
 }

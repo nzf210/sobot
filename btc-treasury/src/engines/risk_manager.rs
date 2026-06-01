@@ -84,17 +84,21 @@ impl RiskManager {
         }
     }
 
-    /// Calculate position size in quote currency given capital and risk params
+    /// Calculate position size in quote currency given capital and risk params.
+    /// The true loss = position_value * (|SL%|/100 + 2 * taker_fee) = capital * risk_pct.
+    /// So: position_value = capital * risk_pct / (|SL%|/100 + 2 * taker_fee)
     pub fn calc_position_size(
-        capital_usdt: f64,
+        capital: f64,
         entry_price: f64,
         stop_loss_pct: f64,
         risk_pct: f64,
+        taker_fee_pct: f64,
     ) -> f64 {
-        let risk_amount = capital_usdt * risk_pct;
         let sl_distance = stop_loss_pct.abs() / 100.0;
-        if sl_distance > 0.0 && entry_price > 0.0 {
-            risk_amount / sl_distance
+        let round_trip_fee = taker_fee_pct * 2.0;
+        let total_risk_per_unit = sl_distance + round_trip_fee;
+        if total_risk_per_unit > 0.0 && entry_price > 0.0 {
+            (capital * risk_pct) / total_risk_per_unit
         } else {
             0.0
         }
@@ -108,5 +112,26 @@ impl RiskManager {
     /// Should we reduce position size?
     pub fn should_reduce(drawdown_pct: f64, threshold: f64) -> bool {
         drawdown_pct > threshold
+    }
+
+    /// Compute minimum stop-loss width from ATR.
+    /// Returns a negative percentage. SL = max_hard_limit(|atr_based|, |current_sl|).
+    ///
+    /// Formula: min_sl_pct = -(max(1.5 × ATR%, 0.8%))
+    /// This prevents SL from being tighter than 1.5× the average 15m noise.
+    pub fn min_sl_from_atr(close_price: f64, atr_14: f64) -> f64 {
+        if close_price <= 0.0 || atr_14 <= 0.0 {
+            return -0.8; // fallback floor
+        }
+        let atr_pct = (atr_14 / close_price) * 100.0;
+        let min_width = (atr_pct * 1.5).max(0.8);
+        -min_width
+    }
+
+    /// Clamp a dynamic_stop_loss to at least min_sl_from_atr width.
+    /// Returns the more negative (wider) of the two, capped at -5.0%.
+    pub fn clamp_sl(original_sl: f64, close_price: f64, atr_14: f64) -> f64 {
+        let min_sl = Self::min_sl_from_atr(close_price, atr_14);
+        original_sl.min(min_sl).max(-5.0)
     }
 }

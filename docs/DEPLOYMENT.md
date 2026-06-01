@@ -28,7 +28,7 @@ Production deployment guide untuk VPS dengan fokus HyperLiquid integration.
 - **Docker**: v24.0+
 - **Docker Compose**: v2.20+
 
-### Required Accounts claude-sonnet-4-5& AUTH
+### Required Accounts & AUTH
 # ============================================
 BACKEND_PORT=8089
 EXECUTOR_PORT=3009
@@ -36,25 +36,21 @@ EXECUTOR_PORT=3009
 EXECUTOR_API_KEY=GENERATED_SECURE_KEY
 
 # ============================================
-# BTC TREASURY & HYPERLIQUID
+# BTC TREASURY (Binance Spot)
 # ============================================
 TELEGRAM_BOT_BTC_TOKEN=YOUR_BTC_BOT_TOKEN
-TELEGRAM_WHITELIST_BTC_USER_IDS=YOUR_CHAT_ID
-HYPERLIQUID_RPC_URL=https://rpc.hyperliquid.xyz/evm
-HYPERLIQUID_KEY_PATH=../hyperliquid.enc
-HYPERLIQUID_CHAIN_ID=133
+TELEGRAM_WHITELIST_USER_BTC_IDS=YOUR_CHAT_ID
 DATA_BTC_DIR=./data/btc-treasury
+
+# Binance Spot API (required for trading)
+BINANCE_API_KEY=YOUR_BINANCE_API_KEY
+BINANCE_API_SECRET=YOUR_BINANCE_API_SECRET
+EXCHANGE_BASE_URL=https://api.binance.com
+
+# Scanner Configuration
 BTC_SCANNER_INTERVAL_SECS=120
 BTC_REPORT_INTERVAL_MINS=180
-BTC_SCANNER_PAIRS=BTC-PERP
-
-# ============================================
-# EXCHANGE (HyperLiquid)
-# ============================================
-EXCHANGE_API_KEY=YOUR_HYPERLIQUID_API_KEY
-EXCHANGE_API_SECRET=YOUR_HYPERLIQUID_API_SECRET
-EXCHANGE_NAME=hyperliquid
-EXCHANGE_BASE_URL=https://api.hyperliquid.xyz
+BTC_SCANNER_PAIRS=ETHBTC,SOLBTC,SUIBTC
 ```
 
 ### Generate Secure Keys

@@ -20,14 +20,10 @@ uuid = { version = "1", features = ["v4"] }
 # Telegram
 teloxide = { version = "0.13", features = ["macros"] }
 
-# Crypto (Binance HMAC-SHA256 signing + wallet encryption)
+# Crypto (Binance HMAC-SHA256 signing)
 hmac = "0.12"
 sha2 = "0.10"
 sha3 = "0.10"
 hex = "0.4"
-aes-gcm = "0.10"
-scrypt = "0.11"
 rand = "0.8"
-k256 = { version = "0.13", features = ["ecdsa"] }
-signature = "2.1"
 async-trait = "0.1"

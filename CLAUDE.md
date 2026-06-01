@@ -29,7 +29,6 @@ executor-ts (Node/Express, port 3009)
 btc-treasury (Rust/Actix, port 8090)
   ├── AdvisoryEngine (hybrid quant + LLM)
   ├── Binance Spot API client
-  ├── HyperLiquid integration
   └── BTC Telegram bot
 ```
 
@@ -77,7 +76,7 @@ btc-treasury (Rust/Actix, port 8090)
 - `src/executors/jupiter.ts` — Jupiter Swap v6: get quote → get transaction → sign with wallet → send on-chain
 - `src/wallets/wallet.ts` — `loadWallet()`: reads `wallet.enc`, decrypts with `WALLET_PASSWORD` env var, returns `Keypair`
 - `src/wallets/crypto.ts` — `encrypt()`/`decrypt()` using AES-256-GCM with scrypt KDF + random salt/IV
-- `src/scripts/generate-wallet.ts` — CLI tool; supports Solana (Ed25519, base58) and Hyperliquid (secp256k1, hex)
+- `src/scripts/generate-wallet.ts` — CLI tool; generates Solana Ed25519 keypair and encrypts with password
 
 **API endpoints**:
 - `GET /health` — Health check
@@ -93,7 +92,7 @@ btc-treasury (Rust/Actix, port 8090)
 
 **Stack**: Rust, Actix-web
 
-**Integrations**: Binance Spot API, HyperLiquid (optional), OpenAI-compatible LLM
+**Integrations**: Binance Spot API, OpenAI-compatible LLM
 
 **Key files**:
 - `src/main.rs` — Entry point; initializes config, engine, Binance client, scanner, reporter, Telegram bot
@@ -105,7 +104,7 @@ btc-treasury (Rust/Actix, port 8090)
 - `src/reporter.rs` — Periodic Telegram treasury reports
 - `src/telegram_bot.rs` — BTC Telegram bot with 18+ commands (see Telegram Bot Commands section)
 - `src/binance.rs` — Binance Spot API client with HMAC-SHA256 signing; market data, order execution, position tracking
-- `src/exchange.rs` — HyperLiquid integration (optional); perpetual trading support
+- `src/exchange.rs` — Binance Spot adapter; ExchangeClient trait implementation
 - `src/position_monitor.rs` — Position tracking with TP/SL/trailing stops
 - `src/execution_engine.rs` — Order execution and position management
 
@@ -117,10 +116,7 @@ btc-treasury (Rust/Actix, port 8090)
 - Order cancellation and position closing
 - Account balance queries
 
-**HyperLiquid Integration** (optional):
-- Perpetual trading support (separate from Spot)
-- Encrypted credential storage (`hyperliquid.enc`)
-- Market data and advisory analysis
+**BTC Treasury Details**:
 
 **API endpoints**:
 - `GET /health` — Health check
@@ -207,7 +203,6 @@ Sequential stages:
 | `LOG_LEVEL` | Zap log level (debug/info/warn/error) |
 | `BINANCE_API_KEY` | Binance Spot API key (BTC Treasury) |
 | `BINANCE_API_SECRET` | Binance Spot API secret (BTC Treasury) |
-| `HYPERLIQUID_KEY_PATH` | Path to encrypted HyperLiquid credentials (default: `./hyperliquid.enc`) |
 | `BTC_TREASURY_PORT` | BTC Treasury service port (default: `8090`) |
 
 ### User Config (runtime, `data/memory/user-config.json`)

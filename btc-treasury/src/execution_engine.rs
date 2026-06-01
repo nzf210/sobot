@@ -18,22 +18,26 @@ impl ExecutionEngine {
         Self { exchange, mem }
     }
 
-    /// Execute a market BUY for a pair. Returns the execution result.
+    /// Execute a market BUY for a pair using quoteOrderQty for precision.
+    /// `quote_amount` is the amount of quote currency to spend (USDT or BTC).
     pub async fn execute_buy(
         &self,
         pair: &str,
-        quantity: f64,
+        quote_amount: f64,
         advisory: &FullBtcAdvisory,
     ) -> anyhow::Result<ExecutionPlan> {
         let exchange = self.exchange.as_ref()
             .ok_or_else(|| anyhow::anyhow!("exchange not configured"))?;
 
         let price = exchange.get_current_price(pair).await?;
-        let result = exchange.place_market_buy(pair, quantity).await?;
+        let result = exchange.place_market_buy_quote(pair, quote_amount).await?;
+
+        // Estimate base quantity for position recording
+        let quantity = if price > 0.0 { quote_amount / price } else { 0.0 };
 
         tracing::info!(
-            "BUY executed: {} {} at ~{} — order_id={}, status={}",
-            pair, quantity, price, result.order_id, result.status
+            "BUY executed: {} quote={:.8} ~{:.6} base — order_id={}, status={}",
+            pair, quote_amount, quantity, result.order_id, result.status
         );
 
         // Record position with LLM-set TP/SL
@@ -105,8 +109,10 @@ impl ExecutionEngine {
             "market_sell".to_string(),
         );
 
-        // Apply50/50 compound/treasury split + update trade stats
-        self.apply_treasury_split(pnl_usdt);
+        // Apply 50/50 compound/treasury split + update trade stats.
+        // Fetch the live BTCUSDT price via async to avoid the 65k hardcoded
+        // fallback that could mis-account by 50%+ if the price feed silently fails.
+        self.apply_treasury_split(pnl_usdt).await;
 
         Ok(update)
     }
@@ -148,15 +154,43 @@ impl ExecutionEngine {
     }
 
     /// After a winning close, split profit: 50% compound (re-enter capital), 50% treasury vault.
-    fn apply_treasury_split(&self, pnl_usdt: f64) {
+    /// Fetches live BTCUSDT price async — refuses to write a corrupt value if
+    /// the price feed is unavailable. (Previously fell back to a hardcoded $65k
+    /// which could mis-account by 50%+ if BTC had moved significantly.)
+    async fn apply_treasury_split(&self, pnl_usdt: f64) {
         if pnl_usdt <= 0.0 {
             return;
         }
-        let mut state = self.mem.get_treasury_state();
-        let btc_price = 65_000.0; // TODO: fetch real BTCUSDT price
+        // Use the exchange to fetch live BTC price. Without an exchange, or
+        // if the price fetch fails, we skip the split rather than write garbage.
+        let btc_price = match self.exchange.as_ref() {
+            Some(ex) => match ex.get_current_price("BTCUSDT").await {
+                Ok(p) if p > 0.0 => p,
+                Ok(_) => {
+                    tracing::error!(
+                        "apply_treasury_split: BTCUSDT price returned 0 — skipping vault/compound split to avoid corrupting treasury"
+                    );
+                    return;
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "apply_treasury_split: BTCUSDT price fetch failed: {} — skipping split", e
+                    );
+                    return;
+                }
+            },
+            None => {
+                tracing::error!(
+                    "apply_treasury_split: no exchange configured — skipping split"
+                );
+                return;
+            }
+        };
         let profit_btc = pnl_usdt / btc_price;
         let treasury_delta = profit_btc * 0.50;
         let compound_delta = profit_btc * 0.50;
+
+        let mut state = self.mem.get_treasury_state();
 
         state.btc_treasury_vault += treasury_delta;
         state.compound_balance += compound_delta;
@@ -165,22 +199,39 @@ impl ExecutionEngine {
 
         self.mem.save_treasury_state(state);
         tracing::info!(
-            "Treasury split: +{:.8} BTC to vault, +{:.8} BTC compound",
-            treasury_delta, compound_delta
+            "Treasury split: +{:.8} BTC to vault, +{:.8} BTC compound (BTC price: {})",
+            treasury_delta, compound_delta, btc_price
         );
     }
 
-    /// Get available capital (USDT balance) for position sizing
-    pub async fn get_available_capital(&self) -> anyhow::Result<f64> {
+    /// Get available capital for position sizing, based on the pair's quote currency.
+    /// For BTC-quote pairs (SOLBTC, ETHBTC): returns free BTC balance.
+    /// For USDT/USDC-quote pairs (BTCUSDT): returns free USDT/USDC balance.
+    pub async fn get_available_capital(&self, pair: &str) -> anyhow::Result<f64> {
         let exchange = self.exchange.as_ref()
             .ok_or_else(|| anyhow::anyhow!("exchange not configured"))?;
         let balances = exchange.get_balances().await?;
-        let usdt = balances
-            .iter()
-            .find(|b| b.asset == "USDT" || b.asset == "USDC")
-            .map(|b| b.free)
-            .unwrap_or(0.0);
-        Ok(usdt)
+
+        let is_btc_quote = pair.to_uppercase().ends_with("BTC") && pair.to_uppercase() != "BTCUSDT";
+
+        let capital = if is_btc_quote {
+            balances.iter()
+                .find(|b| b.asset == "BTC")
+                .map(|b| b.free)
+                .unwrap_or(0.0)
+        } else {
+            balances.iter()
+                .find(|b| b.asset == "USDT" || b.asset == "USDC")
+                .map(|b| b.free)
+                .unwrap_or(0.0)
+        };
+
+        tracing::debug!(
+            "get_available_capital({}): is_btc_quote={}, capital={:.8}",
+            pair, is_btc_quote, capital
+        );
+
+        Ok(capital)
     }
 
     /// Cancel all open orders for a pair

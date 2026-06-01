@@ -269,6 +269,9 @@ pub struct BtcTreasuryState {
     pub losing_trades: i32,
     #[serde(default)]
     pub trading_paused_until: String,
+    /// Track consecutive losses for auto-pause logic
+    #[serde(default)]
+    pub consecutive_losses: i32,
 }
 
 impl Default for BtcTreasuryState {
@@ -287,6 +290,7 @@ impl Default for BtcTreasuryState {
             winning_trades: 0,
             losing_trades: 0,
             trading_paused_until: String::new(),
+            consecutive_losses: 0,
         }
     }
 }
@@ -360,10 +364,14 @@ pub struct BtcConfig {
     pub treasury_pct: f64,
     #[serde(default)]
     pub dry_run: bool,
+    /// Taker fee rate (decimal, e.g. 0.001 = 0.1%).
+    /// Applied at both entry and exit → round-trip = 2× this.
+    #[serde(default = "default_taker_fee")]
+    pub taker_fee_pct: f64,
 }
 
-fn default_take_profit_pct() -> f64 { 5.5 }
-fn default_stop_loss_pct() -> f64 { -1.5 }
+fn default_take_profit_pct() -> f64 { 4.0 }
+fn default_stop_loss_pct() -> f64 { -0.8 }
 fn default_trailing_tp_pct() -> f64 { 3.0 }
 fn default_scanner_pairs() -> Vec<String> { vec!["BTCUSDT".to_string()] }
 fn default_max_positions() -> i32 { 1 }
@@ -372,6 +380,7 @@ fn default_initial_capital() -> f64 { 50.0 }
 fn default_min_score() -> f64 { 80.0 }
 fn default_compound_pct() -> f64 { 0.50 }
 fn default_treasury_pct() -> f64 { 0.50 }
+fn default_taker_fee() -> f64 { 0.001 }
 
 impl Default for BtcConfig {
     fn default() -> Self {
@@ -385,8 +394,8 @@ impl Default for BtcConfig {
             safe_mode_volatility: 9.0,
             safe_mode_drawdown: 0.05,
             scanner_pairs: default_scanner_pairs(),
-            take_profit_pct: 5.5,
-            stop_loss_pct: -1.5,
+            take_profit_pct: 4.0,
+            stop_loss_pct: -0.8,
             trailing_tp_pct: 3.0,
             use_trailing: true,
             max_positions: 1,
@@ -396,6 +405,7 @@ impl Default for BtcConfig {
             compound_pct: 0.50,
             treasury_pct: 0.50,
             dry_run: false,
+            taker_fee_pct: 0.001,
         }
     }
 }
@@ -435,4 +445,13 @@ pub struct BtcAdvisoryInput {
     pub treasury: BtcTreasuryState,
     pub open_positions: Vec<BtcAdvisoryPosition>,
     pub loss_streak: i32,
+    /// AI scoring from technical indicators (OHLCV-based), 0-100
+    #[serde(default)]
+    pub ai_score: Option<f64>,
+    /// Risk assessment from RiskManager
+    #[serde(default)]
+    pub risk_assessment: Option<RiskAssessment>,
+    /// PairMetrics computed from OHLCV candles
+    #[serde(default)]
+    pub pair_metrics: Option<PairMetrics>,
 }

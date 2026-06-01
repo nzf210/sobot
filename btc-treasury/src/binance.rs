@@ -1,13 +1,82 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use sha2::Sha256;
 
-use crate::models::{BtcMarketData, Ohlcv, PairMetrics};
+use crate::models::{BtcMarketData, Ohlcv};
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Run an async fallible operation with exponential backoff on retryable
+/// failures (network errors, 429, 5xx). Non-retryable errors (4xx other than
+/// 429) propagate immediately. Up to `MAX_ATTEMPTS` tries, sleeping
+/// 1s → 2s → 4s with no jitter — Binance's recommended starting point.
+const MAX_ATTEMPTS: u32 = 3;
+const BASE_BACKOFF_MS: u64 = 1000;
+
+async fn with_retry<F, Fut, T>(op_name: &str, mut f: F) -> Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T>>,
+{
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        match f().await {
+            Ok(v) => {
+                if attempt > 1 {
+                    tracing::info!("binance: {} succeeded on attempt {}", op_name, attempt);
+                }
+                return Ok(v);
+            }
+            Err(e) => {
+                let transient = is_transient_error(&e);
+                if !transient || attempt == MAX_ATTEMPTS {
+                    if attempt > 1 {
+                        tracing::error!(
+                            "binance: {} failed after {} attempts: {}",
+                            op_name, attempt, e
+                        );
+                    }
+                    return Err(e);
+                }
+                let backoff_ms = BASE_BACKOFF_MS * (1u64 << (attempt - 1));
+                tracing::warn!(
+                    "binance: {} failed (attempt {}/{}, transient=true): {} — retrying in {}ms",
+                    op_name, attempt, MAX_ATTEMPTS, e, backoff_ms
+                );
+                tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                last_err = Some(e);
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("{}: exhausted retries", op_name)))
+}
+
+/// Best-effort detection of retryable errors from reqwest/anyhow. Looks for
+/// reqwest's error kind, status code in error chain, or message text.
+fn is_transient_error(e: &anyhow::Error) -> bool {
+    let chain = e.chain().collect::<Vec<_>>();
+    for cause in &chain {
+        if let Some(re) = cause.downcast_ref::<reqwest::Error>() {
+            if re.is_timeout() || re.is_connect() || re.is_request() {
+                return true;
+            }
+            if let Some(status) = re.status() {
+                let s = status.as_u16();
+                if s == 429 || (500..600).contains(&s) {
+                    return true;
+                }
+            }
+        }
+        let msg = cause.to_string().to_lowercase();
+        if msg.contains("429") || msg.contains("timeout") || msg.contains("connection") {
+            return true;
+        }
+    }
+    false
+}
 
 #[derive(Debug, Deserialize)]
 pub struct BinanceAccount {
@@ -127,31 +196,37 @@ impl BinanceClient {
     }
 
     async fn signed_get<T: serde::de::DeserializeOwned>(&self, path: &str, params: &[(&str, &str)]) -> Result<T> {
-        let ts = Self::timestamp();
-        let mut query = format!("timestamp={}", ts);
-        for (k, v) in params {
-            query.push('&');
-            query.push_str(k);
-            query.push('=');
-            query.push_str(v);
-        }
-        let signature = self.sign(&query);
-        query.push_str("&signature=");
-        query.push_str(&signature);
+        let op = format!("GET {}", path);
+        with_retry(&op, || async {
+            let ts = Self::timestamp();
+            let mut query = format!("timestamp={}", ts);
+            for (k, v) in params {
+                query.push('&');
+                query.push_str(k);
+                query.push('=');
+                query.push_str(v);
+            }
+            let signature = self.sign(&query);
+            query.push_str("&signature=");
+            query.push_str(&signature);
 
-        let url = format!("{}{}?{}", self.base_url, path, query);
-        let resp = self.client
-            .get(&url)
-            .header("X-MBX-APIKEY", &self.api_key)
-            .send()
-            .await?
-            .error_for_status()?;
-        let body = resp.text().await?;
-        serde_json::from_str(&body)
-            .with_context(|| format!("Binance deserialize error for {}: {}", path, &body[..body.len().min(300)]))
+            let url = format!("{}{}?{}", self.base_url, path, query);
+            let resp = self.client
+                .get(&url)
+                .header("X-MBX-APIKEY", &self.api_key)
+                .send()
+                .await?
+                .error_for_status()?;
+            let body = resp.text().await?;
+            serde_json::from_str(&body)
+                .with_context(|| format!("Binance deserialize error for {}: {}", path, &body[..body.len().min(300)]))
+        }).await
     }
 
     async fn signed_post<T: serde::de::DeserializeOwned>(&self, path: &str, params: &[(&str, String)]) -> Result<T> {
+        // NOTE: order-placement POSTs are NOT retried — a retry could double-fill
+        // a market order. Callers should handle errors and decide whether to retry
+        // by checking the order status via a GET.
         let ts = Self::timestamp();
         let mut query = String::new();
         for (k, v) in params {
@@ -181,11 +256,14 @@ impl BinanceClient {
     }
 
     async fn public_get<T: serde::de::DeserializeOwned>(&self, path: &str, query: &str) -> Result<T> {
-        let url = format!("{}{}?{}", self.base_url, path, query);
-        let resp = self.client.get(&url).send().await?.error_for_status()?;
-        let body = resp.text().await?;
-        serde_json::from_str(&body)
-            .with_context(|| format!("Binance deserialize error for {}: {}", path, &body[..body.len().min(300)]))
+        let op = format!("GET {}", path);
+        with_retry(&op, || async {
+            let url = format!("{}{}?{}", self.base_url, path, query);
+            let resp = self.client.get(&url).send().await?.error_for_status()?;
+            let body = resp.text().await?;
+            serde_json::from_str(&body)
+                .with_context(|| format!("Binance deserialize error for {}: {}", path, &body[..body.len().min(300)]))
+        }).await
     }
 
     pub fn api_key_display(&self) -> String {
@@ -334,6 +412,22 @@ impl BinanceClient {
                 params.push(("timeInForce", "GTC".to_string()));
             }
         }
+        self.signed_post::<BinanceOrderResult>("/api/v3/order", &params).await
+    }
+
+    /// Place a MARKET BUY using quoteOrderQty — spend exactly `quote_amount` of quote currency.
+    /// This avoids precision loss from mid-price → base quantity conversion.
+    pub async fn place_order_quote(
+        &self,
+        symbol: &str,
+        quote_amount: f64,
+    ) -> Result<BinanceOrderResult> {
+        let params: Vec<(&str, String)> = vec![
+            ("symbol", symbol.to_string()),
+            ("side", "BUY".to_string()),
+            ("type", "MARKET".to_string()),
+            ("quoteOrderQty", format!("{:.8}", quote_amount)),
+        ];
         self.signed_post::<BinanceOrderResult>("/api/v3/order", &params).await
     }
 

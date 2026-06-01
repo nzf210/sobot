@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use crate::models::{BtcAdvisoryPosition, BtcMarketData};
+use crate::models::{BtcAdvisoryPosition, BtcMarketData, Ohlcv};
 
 #[derive(Debug, Clone)]
 pub struct ExchangeBalance {
@@ -24,6 +24,9 @@ pub trait ExchangeClient: Send + Sync {
     /// Place a market buy order; returns order ID/status
     async fn place_market_buy(&self, symbol: &str, quantity: f64) -> Result<ExchangeOrderResult>;
 
+    /// Place a market buy using quoteOrderQty — spend exactly `quote_amount`.
+    async fn place_market_buy_quote(&self, symbol: &str, quote_amount: f64) -> Result<ExchangeOrderResult>;
+
     /// Place a limit buy order
     async fn place_limit_buy(&self, symbol: &str, quantity: f64, price: f64) -> Result<ExchangeOrderResult>;
 
@@ -41,6 +44,9 @@ pub trait ExchangeClient: Send + Sync {
 
     /// Get current price for a symbol (for position monitoring)
     async fn get_current_price(&self, symbol: &str) -> Result<f64>;
+
+    /// Fetch OHLCV candles for technical analysis
+    async fn get_klines(&self, symbol: &str, interval: &str, limit: u32) -> Result<Vec<Ohlcv>>;
 
     /// Human-readable exchange name
     fn exchange_name(&self) -> &'static str;
@@ -108,6 +114,15 @@ impl ExchangeClient for BinanceClient {
 
     async fn place_market_buy(&self, symbol: &str, quantity: f64) -> Result<ExchangeOrderResult> {
         let res = self.place_order(symbol, "BUY", "MARKET", quantity, None).await?;
+        Ok(ExchangeOrderResult {
+            order_id: res.order_id.to_string(),
+            status: res.status,
+            filled_qty: 0.0,
+        })
+    }
+
+    async fn place_market_buy_quote(&self, symbol: &str, quote_amount: f64) -> Result<ExchangeOrderResult> {
+        let res = self.place_order_quote(symbol, quote_amount).await?;
         Ok(ExchangeOrderResult {
             order_id: res.order_id.to_string(),
             status: res.status,
@@ -196,141 +211,15 @@ impl ExchangeClient for BinanceClient {
         "Binance"
     }
 
-    fn api_key_display(&self) -> String {
-        self.api_key_display()
-    }
-}
-
-// ── Hyperliquid adapter ─────────────────────────────────────────────────────────
-
-use crate::hyperliquid::HyperliquidClient;
-
-#[async_trait]
-impl ExchangeClient for HyperliquidClient {
-    async fn get_balances(&self) -> Result<Vec<ExchangeBalance>> {
-        let bals = self.get_balances().await?;
-        Ok(bals
-            .into_iter()
-            .map(|b| ExchangeBalance {
-                asset: b.coin,
-                free: b.total - b.hold,
-                locked: b.hold,
-            })
-            .collect())
-    }
-
-    async fn get_market_data(&self, symbol: &str) -> Result<BtcMarketData> {
-        self.get_market_data(symbol).await
-    }
-
-    async fn get_open_orders(&self, symbol: &str) -> Result<Vec<BtcAdvisoryPosition>> {
-        let orders = self.get_open_orders().await?;
-        Ok(orders
-            .into_iter()
-            .filter(|o| o.symbol == symbol)
-            .map(|o| BtcAdvisoryPosition {
-                id: o.oid.to_string(),
-                entry_price: o.price.parse().unwrap_or(0.0),
-                current_price: 0.0,
-                size: o.sz.parse().unwrap_or(0.0),
-                pnl_btc: 0.0,
-                entry_time: String::new(),
-                side: o.side,
-                take_profit_pct: 0.0,
-                stop_loss_pct: 0.0,
-                trailing_tp_pct: 0.0,
-                use_trailing: false,
-                llm_tp_reason: String::new(),
-                llm_sl_reason: String::new(),
-                llm_confidence: 0.0,
-                highest_price: 0.0,
-            })
-            .collect())
-    }
-
-    async fn place_market_buy(&self, symbol: &str, quantity: f64) -> Result<ExchangeOrderResult> {
-        let res = self.place_market_buy(symbol, quantity).await?;
-        Ok(ExchangeOrderResult {
-            order_id: res.order_id.map(|id| id.to_string()).unwrap_or_default(),
-            status: res.status,
-            filled_qty: 0.0,
-        })
-    }
-
-    async fn place_limit_buy(&self, symbol: &str, quantity: f64, price: f64) -> Result<ExchangeOrderResult> {
-        let res = self.place_limit_buy(symbol, quantity, price).await?;
-        Ok(ExchangeOrderResult {
-            order_id: res.order_id.map(|id| id.to_string()).unwrap_or_default(),
-            status: res.status,
-            filled_qty: 0.0,
-        })
-    }
-
-    async fn place_market_sell(&self, symbol: &str, quantity: f64) -> Result<ExchangeOrderResult> {
-        let res = self.place_market_sell(symbol, quantity).await?;
-        Ok(ExchangeOrderResult {
-            order_id: res.order_id.map(|id| id.to_string()).unwrap_or_default(),
-            status: res.status,
-            filled_qty: 0.0,
-        })
-    }
-
-    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<ExchangeOrderResult> {
-        let oid: i64 = order_id.parse()?;
-        let res = self.cancel_order(symbol, oid).await?;
-        Ok(ExchangeOrderResult {
-            order_id: order_id.to_string(),
-            status: res.status,
-            filled_qty: 0.0,
-        })
-    }
-
-    async fn cancel_all(&self, _symbol: &str) -> Result<Vec<ExchangeOrderResult>> {
-        let results = self.cancel_all().await?;
-        Ok(results
-            .into_iter()
-            .map(|r| ExchangeOrderResult {
-                order_id: String::new(),
-                status: r.status,
-                filled_qty: 0.0,
-            })
-            .collect())
-    }
-
-    async fn validate_symbol(&self, symbol: &str) -> Result<bool> {
-        self.validate_symbol(symbol).await
-    }
-
-    async fn get_current_price(&self, symbol: &str) -> Result<f64> {
-        // Hyperliquid: use market data's price via allMids public endpoint
-        #[derive(serde::Serialize)]
-        struct Req { #[serde(rename = "type")] ty: String }
-        let body = serde_json::to_string(&Req { ty: "allMids".to_string() })?;
-        #[derive(serde::Deserialize)]
-        struct MidResp { #[serde(default)] mids: serde_json::Value }
-        let url = format!("{}/info", self.base_url);
-        let client = reqwest::Client::new();
-        let resp = client.post(&url)
-            .header("Content-Type", "application/json")
-            .body(body)
-            .send()
-            .await?;
-        let info: serde_json::Value = resp.json().await?;
-        if let Some(mids) = info.get("allMids").and_then(|v| v.as_object()) {
-            if let Some(price) = mids.get(symbol).and_then(|v| v.as_str()) {
-                if let Ok(p) = price.parse() {
-                    return Ok(p);
-                }
-            }
-        }
-        Err(anyhow::anyhow!("price not found for {}", symbol))
-    }
-
-    fn exchange_name(&self) -> &'static str {
-        "Hyperliquid"
+    async fn get_klines(&self, symbol: &str, interval: &str, limit: u32) -> Result<Vec<Ohlcv>> {
+        self.get_klines(symbol, interval, limit).await
     }
 
     fn api_key_display(&self) -> String {
         self.api_key_display()
     }
 }
+
+// Hyperliquid support removed – Binance Spot only.
+// Any Hyperliquid-specific code has been stripped out.
+
