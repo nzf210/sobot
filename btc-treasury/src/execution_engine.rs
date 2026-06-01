@@ -18,8 +18,22 @@ impl ExecutionEngine {
         Self { exchange, mem }
     }
 
-    /// Execute a market BUY for a pair using quoteOrderQty for precision.
-    /// `quote_amount` is the amount of quote currency to spend (USDT or BTC).
+    /// Execute a market SELL to close a position. Returns treasury update.
+    ///
+    /// **DELETED**: This method was never called from production paths.
+    /// The actual close flow runs through `position_monitor::check_positions`
+    /// which calls `place_market_sell` directly and then
+    /// `MemoryStore::update_treasury_on_close` for BTC accounting.
+    /// Keeping this here would risk a future caller re-introducing a
+    /// double-counted profit split (this method also applied the
+    /// 50/50 vault/compound split, which the position-monitor path
+    /// already does via `cfg.treasury_pct` / `cfg.compound_pct`).
+
+    /// Compute treasury update (BTC accounting JSON)
+    /// `quote_amount` is the amount of QUOTE currency to spend (USDT for
+    /// BTCUSDT, BTC for SOLBTC). Position `size` recorded downstream is the
+    /// derived BASE quantity (e.g. BTC, SOL) so the close path
+    /// (`place_market_sell(pair, base_qty)`) sells what we actually hold.
     pub async fn execute_buy(
         &self,
         pair: &str,
@@ -50,6 +64,12 @@ impl ExecutionEngine {
             "BUY",
         );
 
+        // Deduct spent quote from the local ledger so subsequent risk
+        // calcs see the post-buy balance. Without this, the ledger drifts
+        // from Binance on every buy, eventually causing oversized
+        // positions or live-rejection on insufficient balance.
+        self.mem.deduct_balance_for_buy(pair, quote_amount);
+
         let cfg = self.mem.get_config();
         let tp_price = price * (1.0 + advisory.dynamic_take_profit / 100.0);
         let sl_price = price * (1.0 + advisory.dynamic_stop_loss / 100.0);
@@ -68,140 +88,6 @@ impl ExecutionEngine {
             sl_pct: advisory.dynamic_stop_loss,
             timestamp: chrono::Utc::now().to_rfc3339(),
         })
-    }
-
-    /// Execute a market SELL to close a position. Returns treasury update.
-    pub async fn execute_sell(
-&self,
-        pair: &str,
-        quantity: f64,
-        entry_price: f64,
-    ) -> anyhow::Result<TreasuryUpdate> {
-        let exchange = self.exchange.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("exchange not configured"))?;
-
-        let current_price = exchange.get_current_price(pair).await?;
-        let result = exchange.place_market_sell(pair, quantity).await?;
-
-        tracing::info!(
-            "SELL executed: {} {} at ~{} — order_id={}, status={}",
-            pair, quantity, current_price, result.order_id, result.status
-        );
-
-        // Calculate PnL
-        let pnl_pct = if entry_price > 0.0 {
-            ((current_price - entry_price) / entry_price) * 100.0
-        } else {
-            0.0
-        };
-
-        let position_value_usdt = entry_price * quantity;
-        let pnl_usdt = position_value_usdt * (pnl_pct / 100.0);
-
-        // BTC accounting
-        let treasury_before = self.mem.get_treasury_state().current_btc;
-        let update = self.compute_treasury_update(
-            pair,
-            treasury_before,
-            pnl_pct,
-            pnl_usdt,
-            current_price,
-            "market_sell".to_string(),
-        );
-
-        // Apply 50/50 compound/treasury split + update trade stats.
-        // Fetch the live BTCUSDT price via async to avoid the 65k hardcoded
-        // fallback that could mis-account by 50%+ if the price feed silently fails.
-        self.apply_treasury_split(pnl_usdt).await;
-
-        Ok(update)
-    }
-
-    /// Compute treasury update (BTC accounting JSON)
-    fn compute_treasury_update(
-        &self,
-        pair: &str,
-        btc_before: f64,
-        pnl_pct: f64,
-        pnl_usdt: f64,
-        current_price: f64,
-        close_reason: String,
-    ) -> TreasuryUpdate {
-        let btc_price = current_price; // quote is USDT
-        let profit_btc = if pnl_usdt > 0.0 {
-            pnl_usdt / btc_price
-        } else {
-            pnl_usdt / btc_price
-        };
-
-        let compound_btc = profit_btc * 0.50;
-        let treasury_btc = profit_btc * 0.50;
-        let btc_after = btc_before + treasury_btc;
-        let btc_gain = btc_after - btc_before;
-
-        TreasuryUpdate {
-            pair: pair.to_string(),
-            btc_before,
-            btc_after,
-            btc_gain,
-            profit_btc,
-            compound_btc,
-            treasury_btc,
-            close_reason,
-            pnl_pct,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        }
-    }
-
-    /// After a winning close, split profit: 50% compound (re-enter capital), 50% treasury vault.
-    /// Fetches live BTCUSDT price async — refuses to write a corrupt value if
-    /// the price feed is unavailable. (Previously fell back to a hardcoded $65k
-    /// which could mis-account by 50%+ if BTC had moved significantly.)
-    async fn apply_treasury_split(&self, pnl_usdt: f64) {
-        if pnl_usdt <= 0.0 {
-            return;
-        }
-        // Use the exchange to fetch live BTC price. Without an exchange, or
-        // if the price fetch fails, we skip the split rather than write garbage.
-        let btc_price = match self.exchange.as_ref() {
-            Some(ex) => match ex.get_current_price("BTCUSDT").await {
-                Ok(p) if p > 0.0 => p,
-                Ok(_) => {
-                    tracing::error!(
-                        "apply_treasury_split: BTCUSDT price returned 0 — skipping vault/compound split to avoid corrupting treasury"
-                    );
-                    return;
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "apply_treasury_split: BTCUSDT price fetch failed: {} — skipping split", e
-                    );
-                    return;
-                }
-            },
-            None => {
-                tracing::error!(
-                    "apply_treasury_split: no exchange configured — skipping split"
-                );
-                return;
-            }
-        };
-        let profit_btc = pnl_usdt / btc_price;
-        let treasury_delta = profit_btc * 0.50;
-        let compound_delta = profit_btc * 0.50;
-
-        let mut state = self.mem.get_treasury_state();
-
-        state.btc_treasury_vault += treasury_delta;
-        state.compound_balance += compound_delta;
-        state.total_trades += 1;
-        state.winning_trades += 1;
-
-        self.mem.save_treasury_state(state);
-        tracing::info!(
-            "Treasury split: +{:.8} BTC to vault, +{:.8} BTC compound (BTC price: {})",
-            treasury_delta, compound_delta, btc_price
-        );
     }
 
     /// Get available capital for position sizing, based on the pair's quote currency.

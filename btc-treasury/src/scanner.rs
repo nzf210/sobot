@@ -13,6 +13,7 @@ use crate::exchange::{ExchangeClient};
 use crate::indicators::Indicators;
 use crate::memory::MemoryStore;
 use crate::models::*;
+use crate::position_monitor::record_position_from_advisory;
 
 /// Returns true if pair is a BTC-quote pair (SOLBTC, ETHBTC), not BTCUSDT.
 fn is_btc_quote_pair(pair: &str) -> bool {
@@ -279,7 +280,13 @@ async fn scan_pair(
                 &treasury,
                 mem.get_positions().len() as i32,
                 loss_streak,
-                treasury.usdt_balance * treasury.btc_growth_7d.max(0.0),
+                // `drawdown_pct` is a ratio (0.05 = 5%), not a USD value.
+                // The previous `usdt_balance * btc_growth_7d` form was
+                // (USD × ratio) which under-weighted any reasonable growth
+                // and starved the risk engine of the real drawdown signal.
+                // We approximate drawdown from the absolute BTC growth ratio:
+                // a 5% drop is drawdown=0.05.
+                treasury.btc_growth_7d.abs().min(1.0),
                 treasury.usdt_balance,
                 &config,
             );
@@ -303,6 +310,27 @@ async fn scan_pair(
     };
 
     let mut advisory = engine.analyze(&input).await;
+
+    // Confidence + score gate: the LLM/quant path can return APPROVE with
+    // middling scores (e.g. CONFIDENCE 0.6, score 65). User-configured
+    // `min_confidence` and `min_score_threshold` are the real floor — block
+    // execution when below them. Without this, a noisy regime can trigger
+    // low-quality trades that drag BTC down.
+    let min_conf = config.min_confidence;
+    let min_score = config.min_score_threshold;
+    if advisory.recommendation == "APPROVE"
+        && (advisory.confidence < min_conf || advisory.opportunity_score < min_score)
+    {
+        tracing::info!(
+            "Scanner [{}]: APPROVE blocked — conf {:.2} < {} OR score {:.0} < {}",
+            pair, advisory.confidence, min_conf, advisory.opportunity_score, min_score
+        );
+        advisory.recommendation = "MONITOR".to_string();
+        advisory.reason = format!(
+            "{} (blocked: conf {:.2} < {:.2} or score {:.0} < {:.0})",
+            advisory.reason, advisory.confidence, min_conf, advisory.opportunity_score, min_score
+        );
+    }
 
     *ps.last_regime.write().await = advisory.market_regime.clone();
     *ps.last_recommendation.write().await = advisory.recommendation.clone();
@@ -372,9 +400,14 @@ async fn scan_pair(
 
                 if position_value > 0.0 {
                     if cfg.dry_run {
+                        // Estimate base qty so position_monitor can simulate close.
+                        // For BTC-quote pairs (SOLBTC): base = quote(BTC) / price(BTC/SOL) = SOL.
+                        // For USDT-quote pairs (BTCUSDT): base = quote(USDT) / price(USDT/BTC) = BTC.
+                        let sim_size = if current_price > 0.0 { position_value / current_price } else { 0.0 };
+                        record_position_from_advisory(mem, &advisory, current_price, sim_size, pair, "BUY");
                         tracing::info!(
-                            "[DRY RUN] Scanner [{}]: APPROVE — would execute BUY with {:.2} {} at score {:.0}%",
-                            pair, position_value, quote_asset, advisory.opportunity_score
+                            "[DRY RUN] Scanner [{}]: APPROVE — simulated BUY of {:.2} {} (≈{:.8} base) at score {:.0}",
+                            pair, position_value, quote_asset, sim_size, advisory.opportunity_score
                         );
                     } else {
                         match executor.execute_buy(pair, position_value, &advisory).await {

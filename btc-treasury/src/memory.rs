@@ -25,7 +25,7 @@ impl MemoryStore {
         let defaults: Vec<(&str, &str)> = vec![
             ("btc-treasury.json", r#"{"current_btc":0,"previous_btc":0,"btc_growth_7d":0,"btc_growth_30d":0,"stable_value":0,"usdt_balance":0,"last_update":"","btc_treasury_vault":0,"compound_balance":0,"total_trades":0,"winning_trades":0,"losing_trades":0,"trading_paused_until":"","consecutive_losses":0}"#),
             ("btc-decision-log.json", "[]"),
-            ("btc-config.json", r#"{"enabled":false,"llm_activation_threshold":0.75,"min_confidence":0.80,"max_exposure":0.50,"daily_loss_limit_btc":0.0005,"max_consecutive_losses":3,"safe_mode_volatility":9.0,"safe_mode_drawdown":0.05,"scanner_pairs":["BTCUSDT"],"take_profit_pct":5.5,"stop_loss_pct":-1.5,"trailing_tp_pct":3.0,"use_trailing":true,"max_positions":1,"risk_per_trade_pct":0.01,"initial_capital_usdt":50.0,"min_score_threshold":80.0,"compound_pct":0.50,"treasury_pct":0.50,"dry_run":false}"#),
+            ("btc-config.json", r#"{"enabled":true,"llm_activation_threshold":0.75,"min_confidence":0.80,"max_exposure":0.50,"daily_loss_limit_btc":0.0005,"max_consecutive_losses":3,"safe_mode_volatility":9.0,"safe_mode_drawdown":0.05,"scanner_pairs":["BTCUSDT","SOLBTC","ETHBTC","BNBBTC","XRPBTC","ADABTC","LINKBTC","SUIBTC","AVAXBTC","DOGEBTC"],"take_profit_pct":5.5,"stop_loss_pct":-1.5,"trailing_tp_pct":3.0,"use_trailing":true,"max_positions":1,"risk_per_trade_pct":0.01,"initial_capital_usdt":50.0,"min_score_threshold":80.0,"compound_pct":0.50,"treasury_pct":0.50,"dry_run":true}"#),
             ("btc-positions.json", "[]"),
             ("btc-lessons.json", "[]"),
         ];
@@ -88,6 +88,118 @@ impl MemoryStore {
     pub fn save_treasury_state(&self, mut state: BtcTreasuryState) {
         state.last_update = chrono::Utc::now().to_rfc3339();
         self.write_json("btc-treasury.json", &state);
+    }
+
+    /// Sync treasury state with live Binance Spot balances.
+    ///
+    /// Without this, `btc-treasury.json` starts at zero and only diverges
+    /// further on each closed position — the bot would display "BTC
+    /// Holdings: 0.0" forever even when the account actually holds BTC,
+    /// and `RiskManager::assess` would see `usdt_balance = 0.0` and refuse
+    /// to size any position.
+    ///
+    /// Strategy: adopt the live BTC and USDT balances as the new baseline,
+    /// but preserve any profit-split fields (`btc_treasury_vault`,
+    /// `compound_balance`, trade counters) so the per-trade split logic
+    /// stays intact. The "live" BTC replaces both `current_btc` and
+    /// `previous_btc` so growth calculations on the next 7d/30d window
+    /// have a consistent starting point.
+    pub fn sync_initial_balances(&self, live_btc: f64, live_usdt: f64) {
+        let mut state = self.get_treasury_state();
+        state.current_btc = live_btc;
+        state.previous_btc = live_btc;
+        state.usdt_balance = live_usdt;
+        state.stable_value = live_usdt;
+        self.save_treasury_state(state);
+        tracing::info!(
+            "Synced treasury with Binance balances: BTC={:.8} USDT={:.2}",
+            live_btc, live_usdt
+        );
+    }
+
+    /// Update `btc_growth_7d` / `btc_growth_30d` from the current
+    /// `current_btc` vs `previous_btc`. Should be called once per close
+    /// (after `update_treasury_on_close`) and once at startup
+    /// (after `sync_initial_balances`) so `assess_risk` can read a
+    /// real ratio instead of the always-zero default.
+    ///
+    /// `btc_growth_7d` is the ratio (current_btc - previous_btc) / previous_btc.
+    /// Negative on a loss-anchored close is fine — that's the treasury delta.
+    pub fn update_growth_ratios(&self) {
+        let mut state = self.get_treasury_state();
+        let prev = state.previous_btc;
+        if prev > 0.0 {
+            let ratio = (state.current_btc - prev) / prev;
+            // 7d and 30d windows would normally use a rolling history; we
+            // approximate by treating this as a same-window delta. Once
+            // history persistence is added, swap in real 7d/30d snapshots.
+            state.btc_growth_7d = ratio;
+            state.btc_growth_30d = ratio;
+        }
+        self.save_treasury_state(state);
+    }
+
+    /// Re-sync treasury balance fields with live Binance Spot balances
+    /// after a fill. Used by the position-monitor close path: by the time
+    /// the close order returns, the live exchange balances are the
+    /// source of truth (the local ledger's PnL calculation may differ
+    /// from real fills due to slippage, partial fills, fees). This
+    /// adopts the live balances and refreshes growth ratios.
+    ///
+    /// `live_btc` and `live_usdt` are taken from `exchange.get_balances()`.
+    /// Profit-split fields (`btc_treasury_vault`, `compound_balance`,
+    /// trade counters) are preserved so the per-trade split ledger stays
+    /// intact.
+    pub fn resync_after_fill(&self, live_btc: f64, live_usdt: f64) {
+        let mut state = self.get_treasury_state();
+        // Anchor `previous_btc` to the pre-resync value so growth tracking
+        // still has a valid base. If the field was 0 (first ever close),
+        // use the live value as the anchor too.
+        if state.previous_btc <= 0.0 {
+            state.previous_btc = state.current_btc;
+        }
+        state.current_btc = live_btc;
+        state.usdt_balance = live_usdt;
+        state.stable_value = live_usdt;
+        self.save_treasury_state(state);
+        self.update_growth_ratios();
+        tracing::info!(
+            "Treasury re-synced after fill: BTC={:.8} USDT={:.2}",
+            live_btc, live_usdt
+        );
+    }
+
+    /// Deduct the QUOTE currency we just spent on a buy so the local ledger
+    /// matches Binance. Without this, the next risk calc reads the pre-buy
+    /// balance and sizes the next position as if the previous buy never
+    /// happened — over-sizing compounds until live fills fail.
+    ///
+    /// `pair` is the trading pair (e.g. SOLBTC, BTCUSDT).
+    /// `quote_spent` is the amount of quote currency spent (BTC for SOLBTC,
+    /// USDT for BTCUSDT). Subtracted from the matching ledger field.
+    pub fn deduct_balance_for_buy(&self, pair: &str, quote_spent: f64) {
+        if quote_spent <= 0.0 {
+            return;
+        }
+        let p = pair.to_uppercase();
+        let mut state = self.get_treasury_state();
+        if p.ends_with("BTC") && p != "BTCUSDT" {
+            // BTC-quote pair: quote asset is BTC. We spent `quote_spent` BTC.
+            state.current_btc = (state.current_btc - quote_spent).max(0.0);
+            tracing::info!(
+                "Treasury: deducted {:.8} BTC for {} buy → current_btc={:.8}",
+                quote_spent, pair, state.current_btc
+            );
+        } else {
+            // USDT (or USDC) quote pair: deduct from stable balance.
+            state.usdt_balance = (state.usdt_balance - quote_spent).max(0.0);
+            state.stable_value = state.usdt_balance;
+            tracing::info!(
+                "Treasury: deducted {:.2} USDT for {} buy → usdt_balance={:.2}",
+                quote_spent, pair, state.usdt_balance
+            );
+        }
+        self.save_treasury_state(state);
     }
 
     pub fn log_decision(&self, record: BtcDecisionRecord) {
@@ -205,6 +317,10 @@ impl MemoryStore {
         if pnl_pct > 0.0 {
             let vault_btc = btc_delta * cfg.treasury_pct;
             let compound_btc = btc_delta * cfg.compound_pct;
+            // Capture pre-update btc as `previous_btc` so growth tracking
+            // has a stable anchor. Without this, the `previous_btc` field
+            // is permanently 0 and `btc_growth_7d` can never be computed.
+            state.previous_btc = state.current_btc;
             state.current_btc += btc_delta;
             state.btc_treasury_vault += vault_btc;
             state.compound_balance += compound_btc;
@@ -216,6 +332,9 @@ impl MemoryStore {
                 pair, pnl_pct, btc_delta, gross_pnl, unit, round_trip_fee, unit, vault_btc, compound_btc
             );
         } else {
+            // Same growth-anchor logic on loss: previous_btc = btc before
+            // the loss is applied, so growth calc measures the step.
+            state.previous_btc = state.current_btc;
             state.current_btc = (state.current_btc + btc_delta).max(0.0);
             state.total_trades += 1;
             state.losing_trades += 1;
@@ -227,6 +346,8 @@ impl MemoryStore {
         }
 
         self.save_treasury_state(state);
+        // Refresh growth ratios so /btc_treasury shows real numbers.
+        self.update_growth_ratios();
         true
     }
 

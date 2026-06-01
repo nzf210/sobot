@@ -166,6 +166,22 @@ impl PositionMonitor {
                                 current_price
                             };
                             self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value, btc_price_for_conversion);
+                            // Re-sync the local ledger with the live Binance
+                            // balances now that the close has filled. The
+                            // PnL-based update above is the rough estimate;
+                            // the live balances are the source of truth for
+                            // the next risk calculation.
+                            if let Ok(balances) = exchange.get_balances().await {
+                                let live_btc: f64 = balances.iter()
+                                    .find(|b| b.asset == "BTC")
+                                    .map(|b| b.free + b.locked)
+                                    .unwrap_or(0.0);
+                                let live_usdt: f64 = balances.iter()
+                                    .find(|b| b.asset == "USDT" || b.asset == "USDC")
+                                    .map(|b| b.free + b.locked)
+                                    .unwrap_or(0.0);
+                                self.mem.resync_after_fill(live_btc, live_usdt);
+                            }
                         }
                         Err(e) => {
                             tracing::error!("Failed to execute market sell for {}: {}", pair_id, e);

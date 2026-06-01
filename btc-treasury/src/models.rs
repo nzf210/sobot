@@ -217,22 +217,6 @@ pub struct ExecutionPlan {
     pub timestamp: String,
 }
 
-// ── Treasury Update ─────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TreasuryUpdate {
-    pub pair: String,
-    pub btc_before: f64,
-    pub btc_after: f64,
-    pub btc_gain: f64,
-    pub profit_btc: f64,
-    pub compound_btc: f64,
-    pub treasury_btc: f64,
-    pub close_reason: String,
-    pub pnl_pct: f64,
-    pub timestamp: String,
-}
-
 // ── Trading Signals ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

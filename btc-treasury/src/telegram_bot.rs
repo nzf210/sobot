@@ -343,9 +343,13 @@ impl BtcBot {
                         lines.push(format!("⏸️ *Paused Until:* {}", escape_mdv2(&ts.trading_paused_until)));
                     }
 
-                    // Show other non-zero balances
+                    // Show other non-zero balances. BTC is included so the
+                    // live Binance Spot BTC balance is visible (the BTC
+                    // Treasury block above reads the local ledger value,
+                    // which can drift from the exchange until a position
+                    // closes — the exchange value is the source of truth).
                     let other: Vec<_> = balances.iter()
-                        .filter(|b| b.asset != "USDT" && b.asset != "USDC" && b.asset != "BTC")
+                        .filter(|b| b.asset != "USDT" && b.asset != "USDC")
                         .filter(|b| b.free > 0.0 || b.locked > 0.0)
                         .collect();
                     if !other.is_empty() {
@@ -1291,7 +1295,9 @@ impl BtcBot {
                 pair_metrics: None,
             }).await;
             let current_price = exchange.get_current_price(&pair).await.unwrap_or(0.0);
-            record_position_from_advisory(&*self.mem, &advisory, current_price, size, &pair, "buy");
+            // `size` is QUOTE amount — convert to BASE for position.size.
+            let base_size = if current_price > 0.0 { size / current_price } else { size };
+            record_position_from_advisory(&*self.mem, &advisory, current_price, base_size, &pair, "buy");
             send_mdv2_safe(
                 bot, msg.chat.id,
                 &format!("🧪 *DRY RUN — Simulated Buy*\nPair: {}\nSize: {}\nTP: {:.1}% | SL: {:.1}%\nReason: {}", escape_mdv2(&pair), size, advisory.dynamic_take_profit, advisory.dynamic_stop_loss, escape_mdv2(&advisory.tp_reason))
@@ -1356,8 +1362,18 @@ impl BtcBot {
             }
         }
 
-        // Place market buy on Binance
-        match exchange.place_market_buy(&pair, size).await {
+        // Place market buy on Binance. `size` is the QUOTE-currency amount
+        // (USDT for BTCUSDT, BTC for SOLBTC). Always use `place_market_buy_quote`
+        // so the user specifies the spend amount, not the base quantity —
+        // `place_market_buy` would try to buy `size` SOL of SOLBTC, not
+        // spend `size` BTC. This was a long-standing unit-mixup that
+        // mis-allocated funds on every BTC-quote trade.
+        let buy_result = if is_btc_quote_pair(&pair) || pair == "BTCUSDT" {
+            exchange.place_market_buy_quote(&pair, size).await
+        } else {
+            exchange.place_market_buy(&pair, size).await
+        };
+        match buy_result {
             Ok(result) => {
                 let text = format!(
                     "✅ *Order Placed — Binance Spot*\n\
@@ -1380,14 +1396,25 @@ impl BtcBot {
                 );
 
                 if result.status == "filled" || result.status == "new" {
+                    // `size` is the QUOTE amount (USDT for BTCUSDT, BTC for SOLBTC).
+                    // `position.size` must be the BASE quantity (e.g. BTC, SOL) so
+                    // position_monitor can call `place_market_sell(pair, base_qty)`.
+                    // Estimate base from current_price; live fill may differ slightly
+                    // but it's close enough for TP/SL math.
+                    let base_size = if current_price > 0.0 { size / current_price } else { size };
                     record_position_from_advisory(
                         &*self.mem,
                         &advisory,
                         current_price,
-                        size,
+                        base_size,
                         &pair,
                         "buy",
                     );
+                    // Track committed capital in the local ledger so the next
+                    // RiskManager::assess call sees the post-buy balance. Without
+                    // this, the ledger's `usdt_balance` (or BTC) drifts further
+                    // from Binance on every buy, causing oversized positions.
+                    self.mem.deduct_balance_for_buy(&pair, size);
                 }
 
                 send_mdv2_safe(bot, msg.chat.id, &text).await?;
@@ -1771,4 +1798,11 @@ fn score_bar(score: f64) -> String {
     let empty = 10 - filled;
     let bar = "█".repeat(filled) + &"░".repeat(empty);
     format!("[{}] ", bar)
+}
+
+/// True if `pair` is a BTC-quote spot pair (e.g. SOLBTC, ETHBTC, BNBBTC).
+/// `BTCUSDT` is BTC-base/USDT-quote and intentionally returns false.
+fn is_btc_quote_pair(pair: &str) -> bool {
+    let p = pair.to_uppercase();
+    p.ends_with("BTC") && p != "BTCUSDT"
 }

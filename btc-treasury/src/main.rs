@@ -26,7 +26,7 @@ use crate::execution_engine::ExecutionEngine;
 use crate::position_monitor::PositionMonitor;
 use crate::scanner::ScannerState;
 
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -35,7 +35,7 @@ async fn main() -> std::io::Result<()> {
     let cfg = config::AppConfig::load();
 
     // Shared state
-    let shared = server::run(&cfg).await?;
+    let shared = server::init(&cfg).await?;
 
     // Binance Spot only — Hyperliquid support removed. The exchange_name env
     // var is preserved for forward compatibility but only "binance" is honored.
@@ -63,6 +63,38 @@ async fn main() -> std::io::Result<()> {
         tracing::info!("Binance client initialized (API key: {})", client.api_key_display());
         Some(Arc::new(client) as Arc<dyn ExchangeClient>)
     };
+
+    // Sync treasury state with live Binance balances on startup. Without
+    // this the local ledger stays at 0 and /btc_status shows zero BTC
+    // holdings even when the account actually holds BTC. Also breaks
+    // RiskManager::assess which reads `usdt_balance` to size positions.
+    // Run before scanner/position-monitor spawn so the first risk calc
+    // sees the real value.
+    if let Some(ref exchange) = exchange_client {
+        match exchange.get_balances().await {
+            Ok(balances) => {
+                let live_btc: f64 = balances.iter()
+                    .find(|b| b.asset == "BTC")
+                    .map(|b| b.free + b.locked)
+                    .unwrap_or(0.0);
+                let live_usdt: f64 = balances.iter()
+                    .find(|b| b.asset == "USDT" || b.asset == "USDC")
+                    .map(|b| b.free + b.locked)
+                    .unwrap_or(0.0);
+                shared.mem.sync_initial_balances(live_btc, live_usdt);
+                // Refresh growth ratios so the freshly-synced previous_btc
+                // becomes the anchor and risk calcs see a real btc_growth_7d.
+                shared.mem.update_growth_ratios();
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to fetch live balances for treasury sync: {} — \
+                     btc-treasury.json will keep its existing (likely 0.0) values until next close",
+                    e
+                );
+            }
+        }
+    }
 
     // Scanner state
     let scanner_state = if exchange_client.is_some() {
