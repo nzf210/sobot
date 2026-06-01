@@ -37,9 +37,8 @@ services:
   btc-treasury:
     build: ./btc-treasury
     container_name: solana-hybrid-btc-treasury
-    # Default port 8090 (override with BTC_TREASURY_PORT env var)
-    ports:
-      - "${BTC_TREASURY_PORT:-8090}:${BTC_TREASURY_PORT:-8090}"
+    # No exposed ports — runs as a headless worker driving the BTC Telegram bot
+    # and scanner. State is consumed only through Telegram commands.
     env_file:
       - .env
     volumes:
