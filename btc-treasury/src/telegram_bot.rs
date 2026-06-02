@@ -22,53 +22,53 @@ use crate::scanner::ScannerState;
 const HELP_TEXT: &str = r#"🤖 *BTC Treasury Accumulation* — Binance Spot
 
 *Account & Balances*
-/btc\_status — Spot balance \(USDT \+ all assets\), open orders
+/btc_status — Spot balance \(USDT \+ all assets\), open orders
 
 *Market & Analysis*
-/btc\_market \[PAIR\] — Live market data + OHLCV summary
-/btc\_advisory \[PAIR\] — Full quant \+ LLM advisory
-/btc\_scan \[PAIR\] — Scanner stats per pair \(AI scores\)
+/btc_market \[PAIR\] — Live market data \+ OHLCV summary
+/btc_advisory \[PAIR\] — Full quant \+ LLM advisory
+/btc_scan \[PAIR\] — Scanner stats per pair \(AI scores\)
 
 *Treasury & Positions*
-/btc\_treasury — BTC holdings, vault, compound balance, trade stats
-/btc\_positions — Open positions with TP/SL/trailing
+/btc_treasury — BTC holdings, vault, compound balance, trade stats
+/btc_positions — Open positions with TP/SL/trailing
 
 *Pair Management \(Binance BTC‑Quote\)*
-/btc\_pairs — List active scanned pairs
-/btc\_addpair \<PAIR\> — Add pair \(e\.g\. SOLBTC, ETHBTC, SUIBTC\)
-/btc\_removepair \<PAIR\> — Remove pair from scanner
-/btc\_discover — Auto\-discover all BTC\-quote pairs on Binance
-/btc\_pairinfo \<PAIR\> — AI scores for one pair
+/btc_pairs — List active scanned pairs
+/btc_addpair \<PAIR\> — Add pair \(e\.g\. SOLBTC, ETHBTC, SUIBTC\)
+/btc_removepair \<PAIR\> — Remove pair from scanner
+/btc_discover — Auto\-discover all BTC\-quote pairs on Binance
+/btc_pairinfo \<PAIR\> — AI scores for one pair
 
 *History & Learning*
-/btc\_history — Last 10 decisions
-/btc\_lessons — Recent self\-learning lessons
+/btc_history — Last 10 decisions
+/btc_lessons — Recent self\-learning lessons
 
 *Trading \(Binance Spot\)*
-/btc\_buy \<SIZE\> \<PAIR\> — Market buy with dynamic TP/SL
-/btc\_sell — Close ALL positions at market price
-/btc\_close \<index\> — Close position by index \(1\-based\)
-/btc\_closeall — Force close all positions
-/btc\_cancel — Cancel all open orders
+/btc_buy \<SIZE\> \<PAIR\> — Market buy with dynamic TP/SL
+/btc_sell — Close ALL positions at market price
+/btc_close \<index\> — Close position by index \(1\-based\)
+/btc_closeall — Force close all positions
+/btc_cancel — Cancel all open orders
 
 *Bot Control*
-/btc\_dryrun on\|off — Toggle dry run mode \(simulation\)
-/btc\_pause — Pause trading \(24h\) 
-/btc\_resume — Resume trading
+/btc_dryrun on\|off — Toggle dry run mode \(simulation\)
+/btc_pause — Pause trading \(24h\)
+/btc_resume — Resume trading
 
 *Configuration*
-/btc\_config — Current config \(TP/SL/thresholds\)
-/btc\_setconfig \<key\> \<value\> — Update config live
-/btc\_enable — Enable LLM advisory
-/btc\_disable — Disable LLM advisory
+/btc_config — Current config \(TP/SL/thresholds\)
+/btc_setconfig \<key\> \<value\> — Update config live
+/btc_enable — Enable LLM advisory
+/btc_disable — Disable LLM advisory
 
 *Info*
-/btc\_skills — Full bot capabilities
+/btc_skills — Full bot capabilities
 /help — This message
 
 *Pair Format \(Binance BTC‑Quote\)*
 Examples: SOLBTC, ETHBTC, SUIBTC, LINKBTC, DOGEBTC, ADABTC
-Auto\-discover with /btc\_discover"#;
+Auto\-discover with /btc_discover"#;
 
 const SKILLS_TEXT: &str = r#"*BTC Treasury Accumulation — Skills*
 
@@ -112,7 +112,7 @@ Score \* 80 → DO NOTHING \(cash is a position\)
 - Max 1 position at a time
 - 3 loss streak → Pause 24 hours
 - Drawdown \+ 10% → Reduce position 50%
-- Position size: risk\_amount \+ SL distance
+- Position size: risk_amount \+ SL distance
 
 *7\. Entry Conditions \(ALL must pass\)*
 ✅ RS Rising \(1h RS \* 4h RS\)
