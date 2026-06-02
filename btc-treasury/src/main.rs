@@ -12,6 +12,7 @@ mod llm;
 mod memory;
 mod models;
 mod multi_exchange;
+mod okx;
 mod position_monitor;
 mod reporter;
 mod sanitize;

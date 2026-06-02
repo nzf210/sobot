@@ -104,7 +104,10 @@ pub struct AccountSpec {
     pub enabled: bool,
 }
 
-/// Build a single-account spec from legacy `BINANCE_API_KEY` / `BINANCE_API_SECRET`.
+/// Build a single-account spec from legacy env vars.
+///
+/// - Binance: `BINANCE_API_KEY` + `BINANCE_API_SECRET`
+/// - OKX: `OKX_API_KEY` + `OKX_API_SECRET` + `OKX_API_PASSPHRASE`
 ///
 /// Returns `None` when the legacy env vars are absent (advisory-only mode, identical
 /// to today's behavior). `scanner_pairs` defaults to whatever the env says, falling
@@ -115,8 +118,18 @@ pub fn legacy_default_spec(
 ) -> Option<AccountSpec> {
     let exchange = ExchangeKind::from_str(exchange_name).unwrap_or(ExchangeKind::Binance);
 
-    let key_env = "BINANCE_API_KEY".to_string();
-    let secret_env = "BINANCE_API_SECRET".to_string();
+    let (key_env, secret_env, passphrase_env) = match exchange {
+        ExchangeKind::Binance => (
+            "BINANCE_API_KEY".to_string(),
+            "BINANCE_API_SECRET".to_string(),
+            None,
+        ),
+        ExchangeKind::Okx => (
+            "OKX_API_KEY".to_string(),
+            "OKX_API_SECRET".to_string(),
+            Some("OKX_API_PASSPHRASE".to_string()),
+        ),
+    };
 
     let key_resolved = std::env::var(&key_env).ok().filter(|v| !v.trim().is_empty()).is_some()
         || std::env::var("EXCHANGE_API_KEY").ok().filter(|v| !v.trim().is_empty()).is_some();
@@ -127,14 +140,26 @@ pub fn legacy_default_spec(
         return None;
     }
 
+    // For OKX, also require the passphrase; otherwise the dispatcher will
+    // refuse to build the client. Fail fast here so the user sees a clear
+    // message at startup.
+    if let Some(ref pp_env) = passphrase_env {
+        if std::env::var(pp_env).ok().filter(|v| !v.trim().is_empty()).is_none() {
+            return None;
+        }
+    }
+
     Some(AccountSpec {
         id: "default".to_string(),
-        label: "Default Binance".to_string(),
+        label: match exchange {
+            ExchangeKind::Binance => "Default Binance".to_string(),
+            ExchangeKind::Okx => "Default OKX".to_string(),
+        },
         exchange,
         credentials: Credentials::EnvKeySecret {
             key_env,
             secret_env,
-            passphrase_env: None,
+            passphrase_env,
         },
         scanner_pairs,
         telegram_chat_ids: Vec::new(),
@@ -245,5 +270,42 @@ mod tests {
             },
         ];
         assert!(validate(&specs).is_err());
+    }
+
+    #[test]
+    fn legacy_default_okx_spec_requires_passphrase_env() {
+        // Make sure we start clean.
+        std::env::remove_var("OKX_API_KEY");
+        std::env::remove_var("OKX_API_SECRET");
+        std::env::remove_var("OKX_API_PASSPHRASE");
+
+        // Without any OKX env vars: returns None.
+        assert!(legacy_default_spec("okx", vec!["SOLBTC".into()]).is_none());
+
+        // With key + secret but no passphrase: still None (passphrase is
+        // mandatory for OKX — without it the dispatcher would fail anyway).
+        std::env::set_var("OKX_API_KEY", "test_key");
+        std::env::set_var("OKX_API_SECRET", "test_secret");
+        assert!(legacy_default_spec("okx", vec!["SOLBTC".into()]).is_none());
+
+        // With all three: returns a spec with ExchangeKind::Okx and the
+        // passphrase env recorded.
+        std::env::set_var("OKX_API_PASSPHRASE", "test_pass");
+        let spec = legacy_default_spec("okx", vec!["SOLBTC".into()]).expect("spec");
+        assert_eq!(spec.id, "default");
+        assert_eq!(spec.exchange, ExchangeKind::Okx);
+        match spec.credentials {
+            Credentials::EnvKeySecret { key_env, secret_env, passphrase_env } => {
+                assert_eq!(key_env, "OKX_API_KEY");
+                assert_eq!(secret_env, "OKX_API_SECRET");
+                assert_eq!(passphrase_env.as_deref(), Some("OKX_API_PASSPHRASE"));
+            }
+            _ => panic!("expected EnvKeySecret"),
+        }
+
+        // Cleanup.
+        std::env::remove_var("OKX_API_KEY");
+        std::env::remove_var("OKX_API_SECRET");
+        std::env::remove_var("OKX_API_PASSPHRASE");
     }
 }

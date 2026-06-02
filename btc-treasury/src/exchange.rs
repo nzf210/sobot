@@ -220,6 +220,69 @@ impl ExchangeClient for BinanceClient {
     }
 }
 
+// ── OKX adapter ──────────────────────────────────────────────────────────────
+
+use crate::okx::OkxClient;
+
+#[async_trait]
+impl ExchangeClient for OkxClient {
+    async fn get_balances(&self) -> Result<Vec<ExchangeBalance>> {
+        self.get_balances().await
+    }
+
+    async fn get_market_data(&self, symbol: &str) -> Result<BtcMarketData> {
+        self.get_market_data(symbol).await
+    }
+
+    async fn get_open_orders(&self, symbol: &str) -> Result<Vec<BtcAdvisoryPosition>> {
+        self.get_open_orders(symbol).await
+    }
+
+    async fn place_market_buy(&self, symbol: &str, quantity: f64) -> Result<ExchangeOrderResult> {
+        self.place_market_buy(symbol, quantity).await
+    }
+
+    async fn place_market_buy_quote(&self, symbol: &str, quote_amount: f64) -> Result<ExchangeOrderResult> {
+        self.place_market_buy_quote(symbol, quote_amount).await
+    }
+
+    async fn place_limit_buy(&self, symbol: &str, quantity: f64, price: f64) -> Result<ExchangeOrderResult> {
+        self.place_limit_buy(symbol, quantity, price).await
+    }
+
+    async fn place_market_sell(&self, symbol: &str, quantity: f64) -> Result<ExchangeOrderResult> {
+        self.place_market_sell(symbol, quantity).await
+    }
+
+    async fn cancel_order(&self, symbol: &str, order_id: &str) -> Result<ExchangeOrderResult> {
+        self.cancel_order(symbol, order_id).await
+    }
+
+    async fn cancel_all(&self, symbol: &str) -> Result<Vec<ExchangeOrderResult>> {
+        self.cancel_all(symbol).await
+    }
+
+    async fn validate_symbol(&self, symbol: &str) -> Result<bool> {
+        self.validate_symbol(symbol).await
+    }
+
+    async fn get_current_price(&self, symbol: &str) -> Result<f64> {
+        self.get_current_price(symbol).await
+    }
+
+    fn exchange_name(&self) -> &'static str {
+        "OKX"
+    }
+
+    async fn get_klines(&self, symbol: &str, interval: &str, limit: u32) -> Result<Vec<Ohlcv>> {
+        self.get_klines(symbol, interval, limit).await
+    }
+
+    fn api_key_display(&self) -> String {
+        self.api_key_display_pub()
+    }
+}
+
 // Hyperliquid support removed – Binance Spot only.
 // Any Hyperliquid-specific code has been stripped out.
 

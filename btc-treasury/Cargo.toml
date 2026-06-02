@@ -25,3 +25,7 @@ sha3 = "0.10"
 hex = "0.4"
 rand = "0.8"
 async-trait = "0.1"
+
+# OKX v5 signing + rate limiting
+base64 = "0.22"
+governor = "0.6"

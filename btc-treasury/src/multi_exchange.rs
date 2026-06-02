@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::account_spec::{AccountSpec, ExchangeKind};
 use crate::binance::BinanceClient;
 use crate::exchange::ExchangeClient;
+use crate::okx::OkxClient;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AccountKey {
@@ -105,7 +106,7 @@ impl MultiExchangeClient {
 }
 
 fn build_client_for_spec(spec: &AccountSpec) -> anyhow::Result<Arc<dyn ExchangeClient>> {
-    let (api_key, api_secret, _passphrase) = spec
+    let (api_key, api_secret, passphrase) = spec
         .credentials
         .resolve()
         .map_err(|e| anyhow::anyhow!(e))?;
@@ -123,10 +124,25 @@ fn build_client_for_spec(spec: &AccountSpec) -> anyhow::Result<Arc<dyn ExchangeC
             );
             Ok(Arc::new(client) as Arc<dyn ExchangeClient>)
         }
-        ExchangeKind::Okx => Err(anyhow::anyhow!(
-            "OKX adapter not yet implemented (Fase 2). Account {} skipped.",
-            spec.id
-        )),
+        ExchangeKind::Okx => {
+            let base_url = std::env::var("EXCHANGE_BASE_URL")
+                .ok()
+                .filter(|v| !v.trim().is_empty());
+            let passphrase = passphrase.unwrap_or_default();
+            if passphrase.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "OKX account {} requires a passphrase (set the passphrase env var for this account)",
+                    spec.id
+                ));
+            }
+            let client = OkxClient::new(api_key, api_secret, passphrase, base_url);
+            tracing::info!(
+                "OKX client initialized (account={}, api_key={})",
+                spec.id,
+                client.api_key_display_pub()
+            );
+            Ok(Arc::new(client) as Arc<dyn ExchangeClient>)
+        }
     }
 }
 
@@ -163,5 +179,39 @@ mod tests {
         let m = MultiExchangeClient::from_specs(&[spec]);
         // credentials fail to resolve, so account is dropped from the map.
         assert!(m.is_empty());
+    }
+
+    #[test]
+    fn dispatcher_routes_okx_account() {
+        // Set up OKX env vars so Credentials::EnvKeySecret resolves.
+        std::env::set_var("OKX_TEST_KEY", "okx_key_abcdef1234");
+        std::env::set_var("OKX_TEST_SECRET", "okx_secret");
+        std::env::set_var("OKX_TEST_PASSPHRASE", "okx_pass");
+
+        let spec = AccountSpec {
+            id: "okx_main".into(),
+            label: "OKX Main".into(),
+            exchange: ExchangeKind::Okx,
+            credentials: Credentials::EnvKeySecret {
+                key_env: "OKX_TEST_KEY".into(),
+                secret_env: "OKX_TEST_SECRET".into(),
+                passphrase_env: Some("OKX_TEST_PASSPHRASE".into()),
+            },
+            scanner_pairs: vec!["SOLBTC".into()],
+            telegram_chat_ids: vec![],
+            risk: RiskOverrides::default(),
+            enabled: true,
+        };
+
+        let m = MultiExchangeClient::from_specs(&[spec.clone()]);
+        assert!(!m.is_empty(), "dispatcher should hold the OKX account");
+        let key = AccountKey::from_spec(&spec);
+        let client = m.for_account(&key).expect("client");
+        assert_eq!(client.exchange_name(), "OKX");
+        assert!(client.api_key_display().contains("okx"));
+
+        std::env::remove_var("OKX_TEST_KEY");
+        std::env::remove_var("OKX_TEST_SECRET");
+        std::env::remove_var("OKX_TEST_PASSPHRASE");
     }
 }

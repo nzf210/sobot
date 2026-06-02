@@ -16,7 +16,10 @@ type HmacSha256 = Hmac<Sha256>;
 const MAX_ATTEMPTS: u32 = 3;
 const BASE_BACKOFF_MS: u64 = 1000;
 
-async fn with_retry<F, Fut, T>(op_name: &str, mut f: F) -> Result<T>
+/// Retry helper shared by `binance.rs` and `okx.rs` (Fase 2). Same backoff
+/// schedule, same transient-error classification. Trade POSTs should NOT use
+/// this — a retry could double-fill a market order.
+pub(crate) async fn with_retry<F, Fut, T>(op_name: &str, mut f: F) -> Result<T>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = Result<T>>,
@@ -56,7 +59,7 @@ where
 
 /// Best-effort detection of retryable errors from reqwest/anyhow. Looks for
 /// reqwest's error kind, status code in error chain, or message text.
-fn is_transient_error(e: &anyhow::Error) -> bool {
+pub(crate) fn is_transient_error(e: &anyhow::Error) -> bool {
     let chain = e.chain().collect::<Vec<_>>();
     for cause in &chain {
         if let Some(re) = cause.downcast_ref::<reqwest::Error>() {
