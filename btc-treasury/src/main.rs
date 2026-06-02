@@ -1,3 +1,4 @@
+mod account_spec;
 mod binance;
 mod config;
 mod engines;
@@ -9,6 +10,7 @@ mod indicators;
 mod llm;
 mod memory;
 mod models;
+mod multi_exchange;
 mod position_monitor;
 mod reporter;
 mod sanitize;
@@ -20,9 +22,9 @@ use std::sync::Arc;
 
 use tracing_subscriber::EnvFilter;
 
-use crate::binance::BinanceClient;
 use crate::exchange::ExchangeClient;
 use crate::execution_engine::ExecutionEngine;
+use crate::multi_exchange::MultiExchangeClient;
 use crate::position_monitor::PositionMonitor;
 use crate::scanner::ScannerState;
 
@@ -37,32 +39,23 @@ async fn main() -> std::io::Result<()> {
     // Shared state
     let shared = server::init(&cfg).await?;
 
-    // Binance Spot only — Hyperliquid support removed. The exchange_name env
-    // var is preserved for forward compatibility but only "binance" is honored.
-    let exchange_client: Option<Arc<dyn ExchangeClient>> = if cfg.exchange_api_key.is_empty() || cfg.exchange_api_secret.is_empty() {
-        tracing::warn!("Exchange API key/secret not configured — running advisory-only");
-        None
-    } else if cfg.exchange_name != "binance" {
-        tracing::error!(
-            "exchange_name='{}' is not supported — btc-treasury is Binance Spot only. \
-             Set EXCHANGE_NAME=binance or unset it.",
-            cfg.exchange_name
-        );
-        None
-    } else {
-        let base_url = if cfg.exchange_base_url.is_empty() {
-            None
-        } else {
-            Some(cfg.exchange_base_url.clone())
-        };
-        let client = BinanceClient::new(
-            cfg.exchange_api_key.clone(),
-            cfg.exchange_api_secret.clone(),
-            base_url,
-        );
-        tracing::info!("Binance client initialized (API key: {})", client.api_key_display());
-        Some(Arc::new(client) as Arc<dyn ExchangeClient>)
-    };
+    // ── Fase 0: build the multi-exchange dispatcher from legacy env.
+    // Only one `default` Binance account is supported today. The dispatcher
+    // exposes the same `Arc<dyn ExchangeClient>` via `.default()` so the
+    // existing scanner/monitor/bot call sites do not change.
+    let account_specs = account_spec::load_account_specs(
+        &cfg.exchange_name,
+        cfg.scanner_pairs.clone(),
+    );
+    if let Err(e) = account_spec::validate(&account_specs) {
+        tracing::error!("Invalid account spec: {}", e);
+    }
+    let dispatcher = MultiExchangeClient::from_specs(&account_specs);
+
+    // Existing single-exchange call sites still hold `Option<Arc<dyn ExchangeClient>>`.
+    // `.default()` is `None` when credentials are absent (advisory-only mode),
+    // matching pre-Fase-0 behavior exactly.
+    let exchange_client: Option<Arc<dyn ExchangeClient>> = dispatcher.default();
 
     // Sync treasury state with live Binance balances on startup. Without
     // this the local ledger stays at 0 and /btc_status shows zero BTC
