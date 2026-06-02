@@ -358,83 +358,87 @@ impl BtcBot {
 
     /// /btc_status — Binance Spot balance (USDT + all assets), open orders.
     async fn cmd_status(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let text = if let Some(ref exchange) = self.exchange {
-            match exchange.get_balances().await {
-                Ok(balances) => {
-                    let stable_bal = balances.iter().find(|b| b.asset == "USDT" || b.asset == "USDC");
-                    let stable_free = stable_bal.map(|b| b.free).unwrap_or(0.0);
-                    let stable_locked = stable_bal.map(|b| b.locked).unwrap_or(0.0);
-                    let stable_asset = if balances.iter().any(|b| b.asset == "USDC") { "USDC" } else { "USDT" };
-
-                    let ts = self.mem.get_treasury_state();
-                    let cfg = self.mem.get_config();
-                    let mut lines = vec![
-                        format!("💼 *Account — Binance Spot*"),
-                        format!("Exchange: {}", escape_mdv2(exchange.exchange_name())),
-                        format!("Mode: {}", if cfg.dry_run { "🧪 DRY RUN" } else { "🔴 LIVE" }),
-                        format!("API Key: `{}`", escape_mdv2(&exchange.api_key_display())),
-                        format!("{}: {:.2} free \\| {:.2} locked", stable_asset, stable_free, stable_locked),
-                        format!(""),
-                        format!("🏦 *BTC Treasury*"),
-                        format!("BTC Holdings: {:.8}", ts.current_btc),
-                        format!("BTC Vault: {:.8}", ts.btc_treasury_vault),
-                        format!("Compound: {:.8}", ts.compound_balance),
-                        format!("Trades: {} \\| Win: {} \\| Loss: {}", ts.total_trades, ts.winning_trades, ts.losing_trades),
-                    ];
-
-                    if !ts.trading_paused_until.is_empty() {
-                        lines.push(format!("⏸️ *Paused Until:* {}", escape_mdv2(&ts.trading_paused_until)));
-                    }
-
-                    // Show other non-zero balances. BTC is included so the
-                    // live Binance Spot BTC balance is visible (the BTC
-                    // Treasury block above reads the local ledger value,
-                    // which can drift from the exchange until a position
-                    // closes — the exchange value is the source of truth).
-                    let other: Vec<_> = balances.iter()
-                        .filter(|b| b.asset != "USDT" && b.asset != "USDC")
-                        .filter(|b| b.free > 0.0 || b.locked > 0.0)
-                        .collect();
-                    if !other.is_empty() {
-                        lines.push(String::new());
-                        lines.push("*Other Assets:*".to_string());
-                        for b in other {
-                            lines.push(format!("{}: {:.8} free \\| {:.8} locked", escape_mdv2(&b.asset), b.free, b.locked));
-                        }
-                    }
-
-                    // Open orders
-                    if let Some(ref scanner) = self.scanner {
-                        let pairs = scanner.get_pairs().await;
-                        let mut all_orders: Vec<BtcAdvisoryPosition> = Vec::new();
-                        for pair in &pairs {
-                            if let Ok(orders) = exchange.get_open_orders(pair).await {
-                                all_orders.extend(orders);
-                            }
-                        }
-                        if !all_orders.is_empty() {
-                            lines.push(String::new());
-                            lines.push("*Open Orders:*".to_string());
-                            for o in &all_orders {
-                                lines.push(format!(
-                                    "{} {}: {} @ {} \\| TP: {:.1}% \\| SL: {:.1}%",
-                                    escape_mdv2(&o.side),
-                                    escape_mdv2(&o.id),
-                                    o.size,
-                                    o.entry_price,
-                                    o.take_profit_pct,
-                                    o.stop_loss_pct,
-                                ));
-                            }
-                        }
-                    }
-
-                    lines.join("\n")
-                }
-                Err(e) => format!("Failed: {}", e),
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured. Set EXCHANGE_API_KEY and EXCHANGE_API_SECRET.").await?;
+                return Ok(());
             }
-        } else {
-            "Exchange not configured. Set EXCHANGE_API_KEY and EXCHANGE_API_SECRET.".into()
+        };
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
+        let scanner = rt.scanner_state.as_ref();
+        let text = match exchange.get_balances().await {
+            Ok(balances) => {
+                let stable_bal = balances.iter().find(|b| b.asset == "USDT" || b.asset == "USDC");
+                let stable_free = stable_bal.map(|b| b.free).unwrap_or(0.0);
+                let stable_locked = stable_bal.map(|b| b.locked).unwrap_or(0.0);
+                let stable_asset = if balances.iter().any(|b| b.asset == "USDC") { "USDC" } else { "USDT" };
+
+                let ts = mem.get_treasury_state();
+                let cfg = mem.get_config();
+                let mut lines = vec![
+                    format!("💼 *Account — Binance Spot*"),
+                    format!("Exchange: {}", escape_mdv2(exchange.exchange_name())),
+                    format!("Mode: {}", if cfg.dry_run { "🧪 DRY RUN" } else { "🔴 LIVE" }),
+                    format!("API Key: `{}`", escape_mdv2(&exchange.api_key_display())),
+                    format!("{}: {:.2} free \\| {:.2} locked", stable_asset, stable_free, stable_locked),
+                    format!(""),
+                    format!("🏦 *BTC Treasury*"),
+                    format!("BTC Holdings: {:.8}", ts.current_btc),
+                    format!("BTC Vault: {:.8}", ts.btc_treasury_vault),
+                    format!("Compound: {:.8}", ts.compound_balance),
+                    format!("Trades: {} \\| Win: {} \\| Loss: {}", ts.total_trades, ts.winning_trades, ts.losing_trades),
+                ];
+
+                if !ts.trading_paused_until.is_empty() {
+                    lines.push(format!("⏸️ *Paused Until:* {}", escape_mdv2(&ts.trading_paused_until)));
+                }
+
+                // Show other non-zero balances. BTC is included so the
+                // live Binance Spot BTC balance is visible (the BTC
+                // Treasury block above reads the local ledger value,
+                // which can drift from the exchange until a position
+                // closes — the exchange value is the source of truth).
+                let other: Vec<_> = balances.iter()
+                    .filter(|b| b.asset != "USDT" && b.asset != "USDC")
+                    .filter(|b| b.free > 0.0 || b.locked > 0.0)
+                    .collect();
+                if !other.is_empty() {
+                    lines.push(String::new());
+                    lines.push("*Other Assets:*".to_string());
+                    for b in other {
+                        lines.push(format!("{}: {:.8} free \\| {:.8} locked", escape_mdv2(&b.asset), b.free, b.locked));
+                    }
+                }
+
+                // Open orders
+                let pairs = scanner.get_pairs().await;
+                let mut all_orders: Vec<BtcAdvisoryPosition> = Vec::new();
+                for pair in &pairs {
+                    if let Ok(orders) = exchange.get_open_orders(pair).await {
+                        all_orders.extend(orders);
+                    }
+                }
+                if !all_orders.is_empty() {
+                    lines.push(String::new());
+                    lines.push("*Open Orders:*".to_string());
+                    for o in &all_orders {
+                        lines.push(format!(
+                            "{} {}: {} @ {} \\| TP: {:.1}% \\| SL: {:.1}%",
+                            escape_mdv2(&o.side),
+                            escape_mdv2(&o.id),
+                            o.size,
+                            o.entry_price,
+                            o.take_profit_pct,
+                            o.stop_loss_pct,
+                        ));
+                    }
+                }
+
+                lines.join("\n")
+            }
+            Err(e) => format!("Failed: {}", e),
         };
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
@@ -444,25 +448,29 @@ impl BtcBot {
     /// Defaults to BTCUSDT (price reference), NOT a BTC-quote pair.
     async fn cmd_market(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
         let pair = args.as_deref().unwrap_or("BTCUSDT").trim().to_uppercase();
-        let text = if let Some(ref exchange) = self.exchange {
-            match exchange.get_market_data(&pair).await {
-                Ok(data) => {
-                    format!(
-                        "*{} — Binance Spot*\nRegime: {}\nTrend: {:.1}\nVolume: {:.1}/10\nLiquidity: {:.1}/10\nSpread: {:.1}/10\nVolatility: {:.1}/10\nConfidence: {:.2}",
-                        escape_mdv2(&pair),
-                        escape_mdv2(&data.market_regime),
-                        data.trend_strength,
-                        data.volume_score,
-                        data.liquidity_score,
-                        data.spread_score,
-                        data.volatility_score,
-                        data.confidence,
-                    )
-                }
-                Err(e) => format!("Failed to fetch market data for {}: {}", pair, e),
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured").await?;
+                return Ok(());
             }
-        } else {
-            "Exchange not configured".into()
+        };
+        let exchange = rt.exchange.as_ref();
+        let text = match exchange.get_market_data(&pair).await {
+            Ok(data) => {
+                format!(
+                    "*{} — Binance Spot*\nRegime: {}\nTrend: {:.1}\nVolume: {:.1}/10\nLiquidity: {:.1}/10\nSpread: {:.1}/10\nVolatility: {:.1}/10\nConfidence: {:.2}",
+                    escape_mdv2(&pair),
+                    escape_mdv2(&data.market_regime),
+                    data.trend_strength,
+                    data.volume_score,
+                    data.liquidity_score,
+                    data.spread_score,
+                    data.volatility_score,
+                    data.confidence,
+                )
+            }
+            Err(e) => format!("Failed to fetch market data for {}: {}", pair, e),
         };
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
@@ -474,18 +482,25 @@ impl BtcBot {
         let pair = args.as_deref().unwrap_or("BTCUSDT").trim().to_uppercase();
         let _ = bot_send_plain(bot, msg, &format!("🔍 Running advisory for {}...", pair)).await;
 
-        let (market_data, positions) = if let Some(ref exchange) = self.exchange {
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
+        let (market_data, positions) = {
             let md = exchange.get_market_data(&pair).await.unwrap_or_else(|e| {
                 tracing::error!("Market data: {}", e);
                 default_market_data()
             });
             let orders = exchange.get_open_orders(&pair).await.ok().unwrap_or_default();
             (md, orders)
-        } else {
-            (default_market_data(), vec![])
         };
 
-        let treasury = self.mem.get_treasury_state();
+        let treasury = mem.get_treasury_state();
         let input = BtcAdvisoryInput {
             market_data,
             treasury,
@@ -525,8 +540,16 @@ impl BtcBot {
 
     /// /btc_treasury — BTC treasury state, vault, compound, trade stats.
     async fn cmd_treasury(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let ts = self.mem.get_treasury_state();
-        let cfg = self.mem.get_config();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let mem = rt.mem.as_ref();
+        let ts = mem.get_treasury_state();
+        let cfg = mem.get_config();
         let win_rate = if ts.total_trades > 0 {
             (ts.winning_trades as f64 / ts.total_trades as f64 * 100.0)
         } else {
@@ -573,7 +596,14 @@ impl BtcBot {
 
     /// /btc_positions — open positions with TP/SL/trailing.
     async fn cmd_positions(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let positions = self.mem.get_positions();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let positions = rt.mem.get_positions();
         if positions.is_empty() {
             send_mdv2_safe(bot, msg.chat.id, "📭 No open positions\nCash is a position — wait for AI score ≥ 80").await?;
             return Ok(());
@@ -602,13 +632,14 @@ impl BtcBot {
 
     /// /btc_scan [PAIR] — scanner stats with AI scores.
     async fn cmd_scan(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
-        let scanner = match self.scanner {
-            Some(ref s) => s,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Scanner not active").await?;
                 return Ok(());
             }
         };
+        let scanner = rt.scanner_state.as_ref();
 
         if let Some(pair_raw) = args {
             let pair = pair_raw.trim().to_uppercase();
@@ -670,7 +701,7 @@ impl BtcBot {
                 return Ok(());
             }
 
-            let cfg = self.mem.get_config();
+            let cfg = rt.mem.get_config();
             let threshold = cfg.min_score_threshold;
             let mut lines = vec![format!("*Scanner — AI Scores (threshold: {:.0})*\n", threshold)];
             for s in &snapshots {
@@ -702,13 +733,14 @@ impl BtcBot {
 
     /// /btc_pairs — list active scanned BTC-quote pairs.
     async fn cmd_pairs(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let scanner = match self.scanner {
-            Some(ref s) => s,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Scanner not active").await?;
                 return Ok(());
             }
         };
+        let scanner = rt.scanner_state.as_ref();
         let pairs = scanner.get_pairs().await;
         if pairs.is_empty() {
             bot_send_plain(bot, msg, "No pairs configured\nUse /btc_addpair <PAIR> or /btc_discover").await?;
@@ -749,34 +781,35 @@ impl BtcBot {
             return Ok(());
         }
 
-        let scanner = match self.scanner {
-            Some(ref s) => s,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Scanner not active (exchange not configured)").await?;
                 return Ok(());
             }
         };
+        let scanner = rt.scanner_state.as_ref();
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
 
         // Validate pair exists on Binance
-        if let Some(ref exchange) = self.exchange {
-            match exchange.validate_symbol(&pair).await {
-                Ok(true) => {}
-                Ok(false) => {
-                    bot_send_plain(bot, msg, &format!("Pair '{}' not found on Binance or not trading", pair)).await?;
-                    return Ok(());
-                }
-                Err(e) => {
-                    bot_send_plain(bot, msg, &format!("Failed to verify '{}': {}", pair, e)).await?;
-                    return Ok(());
-                }
+        match exchange.validate_symbol(&pair).await {
+            Ok(true) => {}
+            Ok(false) => {
+                bot_send_plain(bot, msg, &format!("Pair '{}' not found on Binance or not trading", pair)).await?;
+                return Ok(());
+            }
+            Err(e) => {
+                bot_send_plain(bot, msg, &format!("Failed to verify '{}': {}", pair, e)).await?;
+                return Ok(());
             }
         }
 
         if scanner.add_pair(&pair).await {
             let pairs = scanner.get_pairs().await;
-            let mut cfg = self.mem.get_config();
+            let mut cfg = mem.get_config();
             cfg.scanner_pairs = pairs.clone();
-            self.mem.save_config(&cfg);
+            mem.save_config(&cfg);
             bot_send_plain(bot, msg, &format!("✅ Added '{}' to scanner\n{} pairs now active: {}", pair, pairs.len(), pairs.join(", "))).await?;
         } else {
             bot_send_plain(bot, msg, &format!("'{}' already in scanner", pair)).await?;
@@ -794,19 +827,21 @@ impl BtcBot {
             }
         };
 
-        let scanner = match self.scanner {
-            Some(ref s) => s,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Scanner not active").await?;
                 return Ok(());
             }
         };
+        let scanner = rt.scanner_state.as_ref();
+        let mem = rt.mem.as_ref();
 
         if scanner.remove_pair(&pair).await {
             let pairs = scanner.get_pairs().await;
-            let mut cfg = self.mem.get_config();
+            let mut cfg = mem.get_config();
             cfg.scanner_pairs = pairs.clone();
-            self.mem.save_config(&cfg);
+            mem.save_config(&cfg);
             bot_send_plain(bot, msg, &format!("✅ Removed '{}'\n{} pairs remaining: {}", pair, pairs.len(), pairs.join(", "))).await?;
         } else {
             bot_send_plain(bot, msg, &format!("'{}' not found in scanner", pair)).await?;
@@ -816,13 +851,14 @@ impl BtcBot {
 
     /// /btc_discover — auto-discover all BTC-quote pairs on Binance.
     async fn cmd_discover(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let exchange = match &self.exchange {
-            Some(e) => e.as_ref(),
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Exchange not configured").await?;
                 return Ok(());
             }
         };
+        let exchange = rt.exchange.as_ref();
 
         let _ = bot_send_plain(bot, msg, "🔍 Discovering BTC-quote pairs on Binance...").await;
 
@@ -871,13 +907,15 @@ impl BtcBot {
             }
         };
 
-        let scanner = match self.scanner {
-            Some(ref s) => s,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Scanner not active").await?;
                 return Ok(());
             }
         };
+        let scanner = rt.scanner_state.as_ref();
+        let mem = rt.mem.as_ref();
 
         let ps = match scanner.get_pair_state(&pair).await {
             Some(ps) => ps,
@@ -895,7 +933,7 @@ impl BtcBot {
         let last_risk = ps.last_risk_level.read().await;
         let last_reason = ps.last_reason.read().await;
         let score_bar = score_bar(last_conf);
-        let cfg = self.mem.get_config();
+        let cfg = mem.get_config();
 
         let text = format!(
             "*{} — AI Scores*\n\n\
@@ -930,7 +968,14 @@ impl BtcBot {
 
     /// /btc_history — recent decisions.
     async fn cmd_history(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let decisions = self.mem.get_decisions();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "*No decision history yet*").await?;
+                return Ok(());
+            }
+        };
+        let decisions = rt.mem.get_decisions();
         if decisions.is_empty() {
             send_mdv2_safe(bot, msg.chat.id, "*No decision history yet*").await?;
             return Ok(());
@@ -976,7 +1021,14 @@ impl BtcBot {
 
     /// /btc_lessons — recent lessons.
     async fn cmd_lessons(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let lessons = self.mem.get_lessons();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "*No lessons yet*").await?;
+                return Ok(());
+            }
+        };
+        let lessons = rt.mem.get_lessons();
         if lessons.is_empty() {
             send_mdv2_safe(bot, msg.chat.id, "*No lessons yet*").await?;
             return Ok(());
@@ -1007,8 +1059,16 @@ impl BtcBot {
 
     /// /btc_config — current configuration.
     async fn cmd_config(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let cfg = self.mem.get_config();
-        let ts = self.mem.get_treasury_state();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let mem = rt.mem.as_ref();
+        let cfg = mem.get_config();
+        let ts = mem.get_treasury_state();
         let win_rate = if ts.total_trades > 0 {
             (ts.winning_trades as f64 / ts.total_trades as f64 * 100.0)
         } else {
@@ -1072,7 +1132,15 @@ impl BtcBot {
         key: &str,
         val: &str,
     ) -> Result<(), teloxide::RequestError> {
-        let mut cfg = self.mem.get_config();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let mem = rt.mem.as_ref();
+        let mut cfg = mem.get_config();
         let (updated, new_val_str) = match key {
             "enabled" => {
                 match val.parse::<bool>() {
@@ -1220,7 +1288,7 @@ impl BtcBot {
         };
 
         if updated {
-            self.mem.save_config(&cfg);
+            mem.save_config(&cfg);
             bot_send_plain(bot, msg, &format!("✅ {} = {}", key, new_val_str)).await?;
         }
         Ok(())
@@ -1228,48 +1296,67 @@ impl BtcBot {
 
     /// /btc_enable — enable LLM advisory.
     async fn cmd_enable(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let mut cfg = self.mem.get_config();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let mem = rt.mem.as_ref();
+        let mut cfg = mem.get_config();
         cfg.enabled = true;
-        self.mem.save_config(&cfg);
+        mem.save_config(&cfg);
         send_mdv2_safe(bot, msg.chat.id, "✅ LLM advisory *ENABLED*").await?;
         Ok(())
     }
 
     /// /btc_disable — disable LLM advisory.
     async fn cmd_disable(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let mut cfg = self.mem.get_config();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let mem = rt.mem.as_ref();
+        let mut cfg = mem.get_config();
         cfg.enabled = false;
-        self.mem.save_config(&cfg);
+        mem.save_config(&cfg);
         send_mdv2_safe(bot, msg.chat.id, "⏸️ LLM advisory *DISABLED*").await?;
         Ok(())
     }
 
     /// /btc_cancel — cancel all open orders across all pairs.
     async fn cmd_cancel(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let text = if let Some(ref exchange) = self.exchange {
-            match self.scanner {
-                Some(ref scanner) => {
-                    let pairs = scanner.get_pairs().await;
-                    let mut total = 0;
-                    for pair in &pairs {
-                        match exchange.cancel_all(pair).await {
-                            Ok(results) => total += results.len(),
-                            Err(e) => {
-                                tracing::error!("Failed to cancel orders for {}: {}", pair, e);
-                            }
-                        }
-                    }
-                    format!("✅ Cancelled {} open orders across {} pairs", total, pairs.len())
-                }
-                None => {
-                    match exchange.cancel_all("BTCUSDT").await {
-                        Ok(results) => format!("✅ Cancelled {} open orders", results.len()),
-                        Err(e) => format!("Failed: {}", e),
-                    }
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let exchange = rt.exchange.as_ref();
+        let scanner = rt.scanner_state.as_ref();
+        let pairs = scanner.get_pairs().await;
+        let mut total = 0;
+        for pair in &pairs {
+            match exchange.cancel_all(pair).await {
+                Ok(results) => total += results.len(),
+                Err(e) => {
+                    tracing::error!("Failed to cancel orders for {}: {}", pair, e);
                 }
             }
+        }
+        let text = if pairs.is_empty() {
+            // No pairs configured — fall back to cancelling BTCUSDT orders.
+            match exchange.cancel_all("BTCUSDT").await {
+                Ok(results) => format!("✅ Cancelled {} open orders", results.len()),
+                Err(e) => format!("Failed: {}", e),
+            }
         } else {
-            "Exchange not configured".into()
+            format!("✅ Cancelled {} open orders across {} pairs", total, pairs.len())
         };
         bot_send_plain(bot, msg, &text).await?;
         Ok(())
@@ -1278,13 +1365,15 @@ impl BtcBot {
     /// /btc_buy <SIZE> <PAIR> — place market buy on Binance Spot with dynamic TP/SL.
     /// PAIR is a BTC-quote pair (e.g. SOLBTC) or BTCUSDT.
     async fn cmd_buy(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
-        let exchange = match &self.exchange {
-            Some(e) => e,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Exchange not configured").await?;
                 return Ok(());
             }
         };
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
 
         let (size_str, pair) = match args {
             Some(ref a) => {
@@ -1313,8 +1402,8 @@ impl BtcBot {
 
         let _ = bot_send_plain(bot, msg, &format!("📈 Placing BUY order on Binance Spot...\n{} {} @ market price...", size, pair)).await;
 
-        let cfg = self.mem.get_config();
-        let ts = self.mem.get_treasury_state();
+        let cfg = mem.get_config();
+        let ts = mem.get_treasury_state();
 
         // Check trading pause
         if !ts.trading_paused_until.is_empty() {
@@ -1331,7 +1420,7 @@ impl BtcBot {
             let advisory = self.engine.analyze(&BtcAdvisoryInput {
                 market_data: exchange.get_market_data(&pair).await.unwrap_or_else(|_| default_market_data()),
                 treasury: ts,
-                open_positions: self.mem.get_positions(),
+                open_positions: mem.get_positions(),
                 loss_streak: 0,
                 ai_score: None,
                 risk_assessment: None,
@@ -1340,7 +1429,7 @@ impl BtcBot {
             let current_price = exchange.get_current_price(&pair).await.unwrap_or(0.0);
             // `size` is QUOTE amount — convert to BASE for position.size.
             let base_size = if current_price > 0.0 { size / current_price } else { size };
-            record_position_from_advisory(&*self.mem, &advisory, current_price, base_size, &pair, "buy");
+            record_position_from_advisory(mem, &advisory, current_price, base_size, &pair, "buy");
             send_mdv2_safe(
                 bot, msg.chat.id,
                 &format!("🧪 *DRY RUN — Simulated Buy*\nPair: {}\nSize: {}\nTP: {:.1}% | SL: {:.1}%\nReason: {}", escape_mdv2(&pair), size, advisory.dynamic_take_profit, advisory.dynamic_stop_loss, escape_mdv2(&advisory.tp_reason))
@@ -1357,8 +1446,8 @@ impl BtcBot {
             }
         };
 
-        let treasury = self.mem.get_treasury_state();
-        let positions = self.mem.get_positions();
+        let treasury = mem.get_treasury_state();
+        let positions = mem.get_positions();
         let loss_streak = {
             let mut streak = 0;
             for pos in positions.iter().rev() {
@@ -1446,7 +1535,7 @@ impl BtcBot {
                     // but it's close enough for TP/SL math.
                     let base_size = if current_price > 0.0 { size / current_price } else { size };
                     record_position_from_advisory(
-                        &*self.mem,
+                        mem,
                         &advisory,
                         current_price,
                         base_size,
@@ -1457,7 +1546,7 @@ impl BtcBot {
                     // RiskManager::assess call sees the post-buy balance. Without
                     // this, the ledger's `usdt_balance` (or BTC) drifts further
                     // from Binance on every buy, causing oversized positions.
-                    self.mem.deduct_balance_for_buy(&pair, size);
+                    mem.deduct_balance_for_buy(&pair, size);
                 }
 
                 send_mdv2_safe(bot, msg.chat.id, &text).await?;
@@ -1472,16 +1561,18 @@ impl BtcBot {
 
     /// /btc_sell — close all open positions with market sell on Binance Spot.
     async fn cmd_sell(&self, bot: &Bot, msg: &Message, _args: Option<String>) -> Result<(), teloxide::RequestError> {
-        let exchange = match &self.exchange {
-            Some(e) => e,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Exchange not configured").await?;
                 return Ok(());
             }
         };
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
 
-        let cfg = self.mem.get_config();
-        let ts = self.mem.get_treasury_state();
+        let cfg = mem.get_config();
+        let ts = mem.get_treasury_state();
 
         // Check trading pause
         if !ts.trading_paused_until.is_empty() {
@@ -1493,7 +1584,7 @@ impl BtcBot {
             }
         }
 
-        let positions = self.mem.get_positions();
+        let positions = mem.get_positions();
         if positions.is_empty() {
             bot_send_plain(bot, msg, "No open positions to close").await?;
             return Ok(());
@@ -1502,19 +1593,19 @@ impl BtcBot {
         if cfg.dry_run {
             let mut results: Vec<String> = Vec::new();
             for pos in &positions {
-                let btc_price = btc_price_for_conversion(exchange.as_ref(), &pos.id).await;
-                if self.mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size, btc_price) {
+                let btc_price = btc_price_for_conversion(exchange, &pos.id).await;
+                if mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size, btc_price) {
                     let lesson = format!(
                         "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Manual close via /btc_sell.",
                         pos.id, pos.pnl_btc, pos.size
                     );
-                    self.mem.add_lesson(lesson);
+                    mem.add_lesson(lesson);
                     results.push(format!("{} — PnL: {:.2}%", escape_mdv2(&pos.id), pos.pnl_btc));
                 } else {
                     results.push(format!("{} — DRY RUN close recorded (treasury not updated: missing BTC price)", escape_mdv2(&pos.id)));
                 }
             }
-            self.mem.save_positions(&[]);
+            mem.save_positions(&[]);
             let text = format!("🧪 *DRY RUN — Simulated Close All*\n\n{}", results.join("\n"));
             send_mdv2_safe(bot, msg.chat.id, &text).await?;
             return Ok(());
@@ -1531,8 +1622,8 @@ impl BtcBot {
             match exchange.place_market_sell(pair, size).await {
                 Ok(result) => {
                     let position_value_usdt = pos.entry_price * size;
-                    let btc_price = btc_price_for_conversion(exchange.as_ref(), pair).await;
-                    if !self.mem.update_treasury_on_close(pair, pos.pnl_btc, position_value_usdt, btc_price) {
+                    let btc_price = btc_price_for_conversion(exchange, pair).await;
+                    if !mem.update_treasury_on_close(pair, pos.pnl_btc, position_value_usdt, btc_price) {
                         tracing::error!("{} closed on exchange but treasury update skipped — missing BTCUSDT price", pair);
                     }
 
@@ -1540,7 +1631,7 @@ impl BtcBot {
                         "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Manual close via /btc_sell. TP: {:.1}%, SL: {:.1}%",
                         pair, pos.pnl_btc, size, pos.take_profit_pct, pos.stop_loss_pct
                     );
-                    self.mem.add_lesson(lesson);
+                    mem.add_lesson(lesson);
 
                     results.push(format!(
                         "✅ {} closed — {} @ {} | PnL: {:.2}%",
@@ -1554,7 +1645,7 @@ impl BtcBot {
         }
 
         // Remove all closed positions
-        self.mem.save_positions(&[]);
+        mem.save_positions(&[]);
 
         let text = format!("*Close Results — Binance Spot*\n\n{}", results.join("\n"));
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
@@ -1563,16 +1654,18 @@ impl BtcBot {
 
     /// /btc_close <index> — close position by index (1-based).
     async fn cmd_close(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
-        let exchange = match &self.exchange {
-            Some(e) => e,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Exchange not configured").await?;
                 return Ok(());
             }
         };
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
 
-        let cfg = self.mem.get_config();
-        let ts = self.mem.get_treasury_state();
+        let cfg = mem.get_config();
+        let ts = mem.get_treasury_state();
 
         // Check trading pause
         if !ts.trading_paused_until.is_empty() {
@@ -1600,7 +1693,7 @@ impl BtcBot {
             }
         };
 
-        let mut positions = self.mem.get_positions();
+        let mut positions = mem.get_positions();
         if idx >= positions.len() {
             bot_send_plain(bot, msg, &format!("Position #{} not found. You have {} open positions.", idx + 1, positions.len())).await?;
             return Ok(());
@@ -1612,20 +1705,20 @@ impl BtcBot {
         let entry_price = pos.entry_price;
         let pnl_pct = pos.pnl_btc;
 
-        let cfg = self.mem.get_config();
+        let cfg = mem.get_config();
         if cfg.dry_run {
-            let btc_price = btc_price_for_conversion(exchange.as_ref(), &pair).await;
-            if self.mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size, btc_price) {
+            let btc_price = btc_price_for_conversion(exchange, &pair).await;
+            if mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size, btc_price) {
                 let lesson = format!(
                     "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Manual close via /btc_close. TP: {:.1}%, SL: {:.1}%",
                     pair, pnl_pct, size, pos.take_profit_pct, pos.stop_loss_pct
                 );
-                self.mem.add_lesson(lesson);
+                mem.add_lesson(lesson);
             } else {
                 tracing::error!("DRY RUN close for {} — treasury update skipped (missing BTC price)", pair);
             }
             positions.remove(idx);
-            self.mem.save_positions(&positions);
+            mem.save_positions(&positions);
             send_mdv2_safe(
                 bot, msg.chat.id,
                 &format!("🧪 *DRY RUN* — Simulated close\n✅ #{} {} — size: {} | PnL: {:.2}%", idx + 1, escape_mdv2(&pair), size, pnl_pct)
@@ -1636,17 +1729,17 @@ impl BtcBot {
         let _ = exchange.cancel_all(&pair).await;
         match exchange.place_market_sell(&pair, size).await {
             Ok(result) => {
-                let btc_price = btc_price_for_conversion(exchange.as_ref(), &pair).await;
-                if !self.mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size, btc_price) {
+                let btc_price = btc_price_for_conversion(exchange, &pair).await;
+                if !mem.update_treasury_on_close(&pair, pnl_pct, entry_price * size, btc_price) {
                     tracing::error!("{} closed on exchange but treasury update skipped — missing BTCUSDT price", pair);
                 }
                 let lesson = format!(
                     "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Manual close via /btc_close. TP: {:.1}%, SL: {:.1}%",
                     pair, pnl_pct, size, pos.take_profit_pct, pos.stop_loss_pct
                 );
-                self.mem.add_lesson(lesson);
+                mem.add_lesson(lesson);
                 positions.remove(idx);
-                self.mem.save_positions(&positions);
+                mem.save_positions(&positions);
                 send_mdv2_safe(
                     bot, msg.chat.id,
                     &format!("✅ #{} {} closed — {} | PnL: {:.2}%", idx + 1, escape_mdv2(&pair), result.order_id, pnl_pct)
@@ -1661,16 +1754,18 @@ impl BtcBot {
 
     /// /btc_closeall — force close all positions.
     async fn cmd_closeall(&self, bot: &Bot, msg: &Message, _args: Option<String>) -> Result<(), teloxide::RequestError> {
-        let exchange = match &self.exchange {
-            Some(e) => e,
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
             None => {
                 bot_send_plain(bot, msg, "Exchange not configured").await?;
                 return Ok(());
             }
         };
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
 
-        let cfg = self.mem.get_config();
-        let ts = self.mem.get_treasury_state();
+        let cfg = mem.get_config();
+        let ts = mem.get_treasury_state();
 
         // Check trading pause
         if !ts.trading_paused_until.is_empty() {
@@ -1682,30 +1777,30 @@ impl BtcBot {
             }
         }
 
-        let positions = self.mem.get_positions();
+        let positions = mem.get_positions();
         if positions.is_empty() {
             bot_send_plain(bot, msg, "No open positions to close").await?;
             return Ok(());
         }
 
-        let cfg = self.mem.get_config();
+        let cfg = mem.get_config();
         let mut results: Vec<String> = Vec::new();
 
         if cfg.dry_run {
             for pos in &positions {
-                let btc_price = btc_price_for_conversion(exchange.as_ref(), &pos.id).await;
-                if self.mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size, btc_price) {
+                let btc_price = btc_price_for_conversion(exchange, &pos.id).await;
+                if mem.update_treasury_on_close(&pos.id, pos.pnl_btc, pos.entry_price * pos.size, btc_price) {
                     let lesson = format!(
                         "[BTC][MANUAL][DRY RUN] {}: PnL {:.2}%. Size: {}. Force closeall.",
                         pos.id, pos.pnl_btc, pos.size
                     );
-                    self.mem.add_lesson(lesson);
+                    mem.add_lesson(lesson);
                     results.push(format!("🧪 {} — DRY RUN close | PnL: {:.2}%", escape_mdv2(&pos.id), pos.pnl_btc));
                 } else {
                     results.push(format!("⚠️ {} — DRY RUN close recorded (treasury not updated: missing BTC price)", escape_mdv2(&pos.id)));
                 }
             }
-            self.mem.save_positions(&[]);
+            mem.save_positions(&[]);
             let text = format!("🧪 *DRY RUN — Force Close All*\n\n{}", results.join("\n"));
             send_mdv2_safe(bot, msg.chat.id, &text).await?;
             return Ok(());
@@ -1717,15 +1812,15 @@ impl BtcBot {
             let _ = exchange.cancel_all(pair).await;
             match exchange.place_market_sell(pair, size).await {
                 Ok(result) => {
-                    let btc_price = btc_price_for_conversion(exchange.as_ref(), pair).await;
-                    if !self.mem.update_treasury_on_close(pair, pos.pnl_btc, pos.entry_price * size, btc_price) {
+                    let btc_price = btc_price_for_conversion(exchange, pair).await;
+                    if !mem.update_treasury_on_close(pair, pos.pnl_btc, pos.entry_price * size, btc_price) {
                         tracing::error!("{} closed on exchange but treasury update skipped — missing BTCUSDT price", pair);
                     }
                     let lesson = format!(
                         "[BTC][MANUAL] {}: PnL {:.2}%. Size: {}. Force closeall.",
                         pair, pos.pnl_btc, size
                     );
-                    self.mem.add_lesson(lesson);
+                    mem.add_lesson(lesson);
                     results.push(format!("✅ {} closed — {} | PnL: {:.2}%", escape_mdv2(pair), result.order_id, pos.pnl_btc));
                 }
                 Err(e) => {
@@ -1733,7 +1828,7 @@ impl BtcBot {
                 }
             }
         }
-        self.mem.save_positions(&[]);
+        mem.save_positions(&[]);
         let text = format!("*Force Close All — Binance Spot*\n\n{}", results.join("\n"));
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
@@ -1741,10 +1836,18 @@ impl BtcBot {
 
     /// /btc_dryrun on|off — toggle dry run mode.
     async fn cmd_dryrun(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let mem = rt.mem.as_ref();
         let arg = match args {
             Some(ref s) => s.trim().to_lowercase(),
             None => {
-                let cfg = self.mem.get_config();
+                let cfg = mem.get_config();
                 let current = if cfg.dry_run { "ON 🧪 (simulation)" } else { "OFF 🔴 (LIVE)" };
                 bot_send_plain(bot, msg, &format!("Dry Run is currently: {}\n\nUse:\n  /btc_dryrun on  — enable simulation\n  /btc_dryrun off — enable live trading", current)).await?;
                 return Ok(());
@@ -1753,15 +1856,15 @@ impl BtcBot {
 
         match arg.as_str() {
             "on" => {
-                let mut cfg = self.mem.get_config();
+                let mut cfg = mem.get_config();
                 cfg.dry_run = true;
-                self.mem.save_config(&cfg);
+                mem.save_config(&cfg);
                 send_mdv2_safe(bot, msg.chat.id, "🧪 *DRY RUN enabled*\nAll trades will be simulated. No real orders on Binance.").await?;
             }
             "off" => {
-                let mut cfg = self.mem.get_config();
+                let mut cfg = mem.get_config();
                 cfg.dry_run = false;
-                self.mem.save_config(&cfg);
+                mem.save_config(&cfg);
                 send_mdv2_safe(bot, msg.chat.id, "🔴 *LIVE TRADING enabled*\n⚠️ All orders WILL execute on Binance Spot!").await?;
             }
             _ => {
@@ -1773,10 +1876,18 @@ impl BtcBot {
 
     /// /btc_pause — pause trading for 24 hours.
     async fn cmd_pause(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let mut ts = self.mem.get_treasury_state();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let mem = rt.mem.as_ref();
+        let mut ts = mem.get_treasury_state();
         let paused_until = chrono::Utc::now() + chrono::Duration::hours(24);
         ts.trading_paused_until = paused_until.to_rfc3339();
-        self.mem.save_treasury_state(ts);
+        mem.save_treasury_state(ts);
         send_mdv2_safe(
             bot, msg.chat.id,
             &format!("⏸️ *Trading PAUSED*\nResumes: {}\n\nAll buy/sell commands and auto-execution are blocked until then.", escape_mdv2(&paused_until.format("%Y-%m-%d %H:%M UTC").to_string()))
@@ -1786,9 +1897,17 @@ impl BtcBot {
 
     /// /btc_resume — resume trading (clear pause).
     async fn cmd_resume(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let mut ts = self.mem.get_treasury_state();
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                bot_send_plain(bot, msg, "Exchange not configured").await?;
+                return Ok(());
+            }
+        };
+        let mem = rt.mem.as_ref();
+        let mut ts = mem.get_treasury_state();
         ts.trading_paused_until = String::new();
-        self.mem.save_treasury_state(ts);
+        mem.save_treasury_state(ts);
         send_mdv2_safe(bot, msg.chat.id, "▶️ *Trading RESUMED*\nAll commands and auto-execution are now active.").await?;
         Ok(())
     }

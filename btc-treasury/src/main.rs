@@ -130,21 +130,41 @@ async fn main() -> std::io::Result<()> {
         None
     };
 
-    // Reporter
-    if !cfg.telegram_report_chat_ids.is_empty() {
-        let state = scanner_state_for_bot.clone().unwrap_or_else(|| Arc::new(ScannerState::new()));
-        let mem = if let Some(rt) = default_runtime.as_ref() {
-            rt.mem.clone()
-        } else {
-            shared.mem.clone()
-        };
-        let token = cfg.telegram_bot_token.clone();
-        let chat_ids = cfg.telegram_report_chat_ids.clone();
-        let interval = cfg.report_interval_mins;
+    // Per-account runtime map — built once, shared by the reporter and the
+    // Telegram bot. With one `default` account the map has one entry, so
+    // single-account users see byte-identical behavior.
+    let per_account = build_per_account_map(&account_specs, &dispatcher, &cfg.data_dir, &shared.engine);
 
-        tokio::spawn(async move {
-            reporter::run(state, mem, token, chat_ids, interval).await;
-        });
+    // Reporter — per-account loop. With one `default` account the output
+    // matches pre-Fase-1.5 byte-for-byte (no per-account prefix). With N
+    // accounts each gets its own report prefixed with [account_id] plus an
+    // aggregate digest appended to the first account's chat list.
+    if !cfg.telegram_report_chat_ids.is_empty() {
+        let mut reports = Vec::new();
+        for spec in &account_specs {
+            if let Some(rt) = per_account.get(&spec.id) {
+                let mut chats = spec.telegram_chat_ids.clone();
+                if chats.is_empty() {
+                    chats = cfg.telegram_report_chat_ids.clone();
+                }
+                reports.push(reporter::PerAccountReport {
+                    account_id: spec.id.clone(),
+                    state: rt.scanner_state.clone(),
+                    mem: rt.mem.clone(),
+                    chat_ids: chats,
+                });
+            }
+        }
+        if !reports.is_empty() {
+            let token = cfg.telegram_bot_token.clone();
+            let fallback = cfg.telegram_report_chat_ids.clone();
+            let interval = cfg.report_interval_mins;
+            tokio::spawn(async move {
+                reporter::run(reports, token, fallback, interval).await;
+            });
+        } else {
+            tracing::warn!("Reporter disabled — no per-account runtimes available");
+        }
     } else {
         tracing::warn!("TELEGRAM_REPORT_CHAT_IDS not set — reporter disabled");
     }
@@ -154,7 +174,6 @@ async fn main() -> std::io::Result<()> {
         // Build the per-account map for multi-account routing. With one
         // `default` account, the bot behaves identically to pre-Fase-1
         // because every chat's active account resolves to `default`.
-        let per_account = build_per_account_map(&account_specs, &dispatcher, &cfg.data_dir, &shared.engine);
         let bot = Arc::new(telegram_bot::BtcBot::new(
             cfg.telegram_bot_token.clone(),
             cfg.telegram_whitelist.clone(),

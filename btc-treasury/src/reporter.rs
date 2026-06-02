@@ -6,60 +6,152 @@ use crate::format::{escape_mdv2, send_mdv2_safe};
 use crate::scanner::{ScannerState, RecentDecision};
 use crate::memory::MemoryStore;
 
+/// Per-account report target. One reporter loop iterates `Vec<PerAccountReport>`
+/// and emits a per-account block. With one `default` account the output is
+/// byte-identical to the pre-Fase-1.5 reporter (no per-account prefix added
+/// when there's only one account — keeps the single-account user experience
+/// unchanged).
+#[derive(Clone)]
+pub struct PerAccountReport {
+    pub account_id: String,
+    pub state: Arc<ScannerState>,
+    pub mem: Arc<MemoryStore>,
+    /// Per-account chat IDs (from `AccountSpec.telegram_chat_ids`). If empty,
+    /// the reporter falls back to `fallback_chat_ids` (the legacy global
+    /// `telegram_report_chat_ids` env). This preserves single-account behavior
+    /// where the global list is the only source.
+    pub chat_ids: Vec<i64>,
+}
+
 pub async fn run(
-    state: Arc<ScannerState>,
-    mem: Arc<MemoryStore>,
+    accounts: Vec<PerAccountReport>,
     bot_token: String,
-    chat_ids: Vec<i64>,
+    fallback_chat_ids: Vec<i64>,
     interval_mins: u64,
 ) {
-    if chat_ids.is_empty() {
+    // Resolve effective chat targets per account (per-account → fallback).
+    let effective: Vec<(PerAccountReport, Vec<i64>)> = accounts
+        .into_iter()
+        .map(|a| {
+            let chats = if a.chat_ids.is_empty() {
+                fallback_chat_ids.clone()
+            } else {
+                a.chat_ids.clone()
+            };
+            (a, chats)
+        })
+        .filter(|(_, chats)| !chats.is_empty())
+        .collect();
+
+    if effective.is_empty() {
         tracing::warn!("No report chat IDs configured — reporter disabled");
         return;
     }
 
+    let multi = effective.len() > 1;
+    tracing::info!(
+        "BTC reporter started (every {} min) for {} account(s)",
+        interval_mins,
+        effective.len()
+    );
+
     let mut tick = interval(Duration::from_secs(interval_mins * 60));
-    let mut last_lesson_count = mem.get_lessons().len();
-    tracing::info!("BTC reporter started (every {} min) to {} chat(s)", interval_mins, chat_ids.len());
+    let mut last_lesson_count: std::collections::HashMap<String, usize> = effective
+        .iter()
+        .map(|(a, _)| (a.account_id.clone(), a.mem.get_lessons().len()))
+        .collect();
 
     loop {
         tick.tick().await;
 
-        let snapshots = state.all_snapshots().await;
-
-        let recent: Vec<RecentDecision> = {
-            let recents = state.recent_decisions.read().await;
-            recents.iter().rev().take(5).cloned().collect()
-        };
-
-        let all_lessons = mem.get_lessons();
-        let new_lessons: Vec<String> = if all_lessons.len() > last_lesson_count {
-            all_lessons[last_lesson_count..].to_vec()
-        } else {
-            vec![]
-        };
-        last_lesson_count = all_lessons.len();
-
-        let msg = format_report(&snapshots, &recent, &new_lessons);
-
         let bot = teloxide::prelude::Bot::new(&bot_token);
-        for chat_id in &chat_ids {
-            let chat = teloxide::prelude::ChatId(*chat_id);
-            if let Err(e) = send_mdv2_safe(&bot, chat, &msg).await {
-                tracing::error!("Reporter: failed to send to {}: {}", chat_id, e);
+        for (acct, chat_ids) in &effective {
+            let prev = last_lesson_count.get(&acct.account_id).copied().unwrap_or(0);
+
+            // Async fetches (reporter is itself async).
+            let snapshots = acct.state.all_snapshots().await;
+            let recent: Vec<RecentDecision> = {
+                let recents = acct.state.recent_decisions.read().await;
+                recents.iter().rev().take(5).cloned().collect()
+            };
+            let all_lessons = acct.mem.get_lessons();
+            let new_lessons: Vec<String> = if all_lessons.len() > prev {
+                all_lessons[prev..].to_vec()
+            } else {
+                vec![]
+            };
+
+            // Skip empty reports to avoid Telegram spam.
+            if snapshots.is_empty() && recent.is_empty() && new_lessons.is_empty() {
+                continue;
+            }
+
+            let msg = format_report(&acct.account_id, &snapshots, &recent, &new_lessons, multi);
+            for chat_id in chat_ids {
+                let chat = teloxide::prelude::ChatId(*chat_id);
+                if let Err(e) = send_mdv2_safe(&bot, chat, &msg).await {
+                    tracing::error!(
+                        "Reporter [{}]: failed to send to {}: {}",
+                        acct.account_id, chat_id, e
+                    );
+                }
+            }
+        }
+        // Update lesson counters AFTER the per-account send so the next tick
+        // detects only genuinely new lessons.
+        for (acct, _) in &effective {
+            last_lesson_count.insert(acct.account_id.clone(), acct.mem.get_lessons().len());
+        }
+
+        // Multi-account aggregate footer (sent once per loop to the first
+        // account's chat list to avoid spamming every chat with the same
+        // digest).
+        if multi {
+            if let Some((_, first_chats)) = effective.first() {
+                let total_btc: f64 = effective
+                    .iter()
+                    .map(|(a, _)| a.mem.get_treasury_state().current_btc)
+                    .sum();
+                let total_vault: f64 = effective
+                    .iter()
+                    .map(|(a, _)| a.mem.get_treasury_state().btc_treasury_vault)
+                    .sum();
+                let total_trades: u64 = effective
+                    .iter()
+                    .map(|(a, _)| a.mem.get_treasury_state().total_trades as u64)
+                    .sum();
+                let aggregate = format!(
+                    "\n──────────\n*Aggregate — All Accounts*\nBTC: {:.8} \\| Vault: {:.8} \\| Trades: {}",
+                    total_btc, total_vault, total_trades
+                );
+                for chat_id in first_chats {
+                    let chat = teloxide::prelude::ChatId(*chat_id);
+                    if let Err(e) = send_mdv2_safe(&bot, chat, &aggregate).await {
+                        tracing::error!("Reporter [aggregate]: failed to send to {}: {}", chat_id, e);
+                    }
+                }
             }
         }
     }
 }
 
 fn format_report(
+    account_id: &str,
     snapshots: &[crate::scanner::PairSnapshot],
     recent: &[RecentDecision],
     new_lessons: &[String],
+    multi: bool,
 ) -> String {
     let mut lines: Vec<String> = Vec::new();
 
-    lines.push("*BTC Scan Report — Binance Spot*\n".into());
+    // Single-account legacy behavior: title is just "*BTC Scan Report — Binance Spot*".
+    // Multi-account: prefix with account id so users can tell which account a
+    // block came from.
+    if multi {
+        lines.push(format!("*BTC Scan Report — [{}]*\n", account_id));
+    } else {
+        lines.push("*BTC Scan Report — Binance Spot*\n".into());
+    }
 
     let total_scanned: u64 = snapshots.iter().map(|s| s.stats.scanned).sum();
     let total_errors: u64 = snapshots.iter().map(|s| s.stats.errors).sum();
