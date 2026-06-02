@@ -120,33 +120,47 @@ func (s *MemoryStore) LogDecision(token string, metrics interface{}, decision, r
 	return os.WriteFile(path, out, 0644)
 }
 
+// Max bytes of context we'll inject into the LLM prompt. Anything bigger
+// gets truncated. Without this, lessons.json (which grows over time) can
+// push the LLM prompt past 8-10KB on every pipeline run.
+const maxContextBytes = 4000
+
 func (s *MemoryStore) LoadContext() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var ctx string
-	
-	// Read strategies
-	if b, err := os.ReadFile(filepath.Join(s.dataDir, "strategies.json")); err == nil {
-		ctx += "\nSTRATEGIES:\n" + string(b)
-	}
-	
-	// Read lessons
-	if b, err := os.ReadFile(filepath.Join(s.dataDir, "lessons.json")); err == nil {
-		ctx += "\nLESSONS LEARNED:\n" + string(b)
+
+	appendCapped := func(label, body string) {
+		if body == "" {
+			return
+		}
+		ctx += "\n" + label + ":\n" + body
+		if len(ctx) > maxContextBytes {
+			ctx = ctx[:maxContextBytes] + "\n[truncated]"
+		}
 	}
 
-	// Read signal weights
-	if b, err := os.ReadFile(filepath.Join(s.dataDir, "signal-weights.json")); err == nil {
-		ctx += "\nSIGNAL WEIGHTS:\n" + string(b)
-	}
-
-	// Read user config
-	if b, err := os.ReadFile(filepath.Join(s.dataDir, "user-config.json")); err == nil {
-		ctx += "\nUSER CONFIG:\n" + string(b)
-	}
+	appendCapped("STRATEGIES", readFileBounded(filepath.Join(s.dataDir, "strategies.json"), 1500))
+	appendCapped("LESSONS (recent)", readFileBounded(filepath.Join(s.dataDir, "lessons.json"), 1500))
+	appendCapped("SIGNAL WEIGHTS", readFileBounded(filepath.Join(s.dataDir, "signal-weights.json"), 500))
+	appendCapped("USER CONFIG", readFileBounded(filepath.Join(s.dataDir, "user-config.json"), 500))
 
 	return ctx
+}
+
+// Read a file and cap its size. If the file is bigger than max bytes, only
+// the most recent portion is returned (lessons.json and decision-log.json
+// append to the end, so the tail is the freshest signal).
+func readFileBounded(path string, max int) string {
+	b, err := os.ReadFile(path)
+	if err != nil || len(b) == 0 {
+		return ""
+	}
+	if len(b) <= max {
+		return string(b)
+	}
+	return "[older entries truncated]\n" + string(b[len(b)-max:])
 }
 
 func (s *MemoryStore) GetUserConfig() UserConfig {

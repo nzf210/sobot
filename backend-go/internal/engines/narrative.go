@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -15,20 +16,60 @@ import (
 
 // LLMNarrativeAnalysis sends full pipeline context to the LLM and parses the response.
 type LLMNarrativeAnalysis struct {
-	url     string
-	model   string
-	apiKey  string
-	log     *zap.Logger
-	mem     *memory.MemoryStore
+	url       string
+	model     string
+	apiKey    string
+	log       *zap.Logger
+	mem       *memory.MemoryStore
+
+	// Cache: skip LLM call when the same token was analyzed within the
+	// window. Key = token address, value = (result, timestamp). The Solana
+	// scanner can re-detect the same token multiple times in a few minutes
+	// as price/holder data updates — we don't need a fresh LLM verdict for
+	// each pass until the window expires.
+	mu    sync.RWMutex
+	cache map[string]cacheEntry
 }
+
+type cacheEntry struct {
+	result    LLMResult
+	expiresAt time.Time
+}
+
+const llmCacheTTL = 3 * time.Minute
 
 func NewLLMNarrativeAnalysis(url, model, apiKey string, mem *memory.MemoryStore, log *zap.Logger) *LLMNarrativeAnalysis {
 	return &LLMNarrativeAnalysis{
-		url:     url,
-		model:   model,
-		apiKey:  apiKey,
-		log:     log,
-		mem:     mem,
+		url:    url,
+		model:  model,
+		apiKey: apiKey,
+		log:    log,
+		mem:    mem,
+		cache:  make(map[string]cacheEntry),
+	}
+}
+
+func (a *LLMNarrativeAnalysis) cacheGet(token string) (LLMResult, bool) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	e, ok := a.cache[token]
+	if !ok || time.Now().After(e.expiresAt) {
+		return LLMResult{}, false
+	}
+	return e.result, true
+}
+
+func (a *LLMNarrativeAnalysis) cachePut(token string, result LLMResult) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cache[token] = cacheEntry{result: result, expiresAt: time.Now().Add(llmCacheTTL)}
+	if len(a.cache) > 256 {
+		now := time.Now()
+		for k, v := range a.cache {
+			if now.After(v.expiresAt) {
+				delete(a.cache, k)
+			}
+		}
 	}
 }
 
@@ -47,6 +88,24 @@ type LLMResult struct {
 
 // Analyze sends enriched pipeline signal to LLM and returns result.
 func (a *LLMNarrativeAnalysis) Analyze(sig *PipelineSignal) {
+	token := sig.Metrics.Token
+
+	// Cache hit: skip the LLM round-trip. Same token, same verdict shape,
+	// and the position manager is the only consumer of DynamicTP/SL on a
+	// short cadence — 3min staleness is acceptable.
+	if cached, ok := a.cacheGet(token); ok {
+		a.log.Debug("LLM cache hit", zap.String("token", token))
+		sig.LLMDecision = cached.Decision
+		sig.LLMConfidence = cached.Confidence
+		sig.LLMNarrativeScore = cached.NarrativeScore
+		sig.LLMDLMMSuitability = cached.DLMMSuitability
+		sig.LLMDynamicTakeProfit = cached.DynamicTakeProfit
+		sig.LLMDynamicStopLoss = cached.DynamicStopLoss
+		sig.LLMTPReason = cached.TPReason
+		sig.LLMSLReason = cached.SLReason
+		return
+	}
+
 	ctxStr := a.mem.LoadContext()
 
 	prompt := a.buildPrompt(sig, ctxStr)
@@ -63,6 +122,8 @@ func (a *LLMNarrativeAnalysis) Analyze(sig *PipelineSignal) {
 			DynamicStopLoss:  -10.0, // fallback default
 			Reasoning:       "LLM unavailable, using heuristic fallback",
 		}
+	} else {
+		a.cachePut(token, result)
 	}
 
 	sig.LLMDecision = result.Decision

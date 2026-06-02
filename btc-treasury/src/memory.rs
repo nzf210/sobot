@@ -25,7 +25,7 @@ impl MemoryStore {
         let defaults: Vec<(&str, &str)> = vec![
             ("btc-treasury.json", r#"{"current_btc":0,"previous_btc":0,"btc_growth_7d":0,"btc_growth_30d":0,"stable_value":0,"usdt_balance":0,"last_update":"","btc_treasury_vault":0,"compound_balance":0,"total_trades":0,"winning_trades":0,"losing_trades":0,"trading_paused_until":"","consecutive_losses":0}"#),
             ("btc-decision-log.json", "[]"),
-            ("btc-config.json", r#"{"enabled":true,"llm_activation_threshold":0.75,"min_confidence":0.80,"max_exposure":0.50,"daily_loss_limit_btc":0.0005,"max_consecutive_losses":3,"safe_mode_volatility":9.0,"safe_mode_drawdown":0.05,"scanner_pairs":["BTCUSDT","SOLBTC","ETHBTC","BNBBTC","XRPBTC","ADABTC","LINKBTC","SUIBTC","AVAXBTC","DOGEBTC"],"take_profit_pct":5.5,"stop_loss_pct":-1.5,"trailing_tp_pct":3.0,"use_trailing":true,"max_positions":1,"risk_per_trade_pct":0.01,"initial_capital_usdt":50.0,"min_score_threshold":80.0,"compound_pct":0.50,"treasury_pct":0.50,"dry_run":true}"#),
+            ("btc-config.json", r#"{"enabled":true,"llm_activation_threshold":0.85,"min_confidence":0.80,"max_exposure":0.50,"daily_loss_limit_btc":0.0005,"max_consecutive_losses":3,"safe_mode_volatility":9.0,"safe_mode_drawdown":0.05,"scanner_pairs":["BTCUSDT","SOLBTC","ETHBTC","BNBBTC","XRPBTC","ADABTC","LINKBTC","SUIBTC","AVAXBTC","DOGEBTC"],"take_profit_pct":5.5,"stop_loss_pct":-1.5,"trailing_tp_pct":3.0,"use_trailing":true,"max_positions":1,"risk_per_trade_pct":0.01,"initial_capital_usdt":50.0,"min_score_threshold":80.0,"compound_pct":0.50,"treasury_pct":0.50,"dry_run":true}"#),
             ("btc-positions.json", "[]"),
             ("btc-lessons.json", "[]"),
         ];
@@ -361,15 +361,23 @@ impl MemoryStore {
         if lessons.is_empty() {
             return String::new();
         }
-        let recent: Vec<&String> = lessons.iter().rev().take(10).collect();
-        format!(
-            "\n\nRECENT SELF-LEARNING LESSONS (learn from these):\n{}",
-            recent
-                .iter()
-                .enumerate()
-                .map(|(i, l)| format!("{}. {}", i + 1, l))
-                .collect::<Vec<_>>()
-                .join("\n")
-        )
+        // Take only the 3 most recent lessons, each capped at 250 chars.
+        // Previous behavior: 10 lessons at full length. With 379+ lessons
+        // accumulating over time, this grew unbounded and added ~5-10KB to
+        // every LLM call. The LLM doesn't need a history lesson — it needs
+        // the freshest signal of what just went wrong.
+        let recent: Vec<&String> = lessons.iter().rev().take(3).collect();
+        let mut out = String::from("\n\nRECENT LESSONS (3 most recent):\n");
+        for (i, l) in recent.iter().enumerate() {
+            let truncated: String = if l.chars().count() > 250 {
+                let mut s: String = l.chars().take(247).collect();
+                s.push_str("...");
+                s
+            } else {
+                (*l).clone()
+            };
+            out.push_str(&format!("{}. {}\n", i + 1, truncated));
+        }
+        out
     }
 }

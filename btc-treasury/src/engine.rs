@@ -1,14 +1,12 @@
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use tokio::sync::RwLock;
 
 use crate::llm::LlmClient;
 use crate::memory::MemoryStore;
 use crate::models::*;
-
-pub struct AdvisoryEngine {
-    llm: LlmClient,
-    mem: Arc<MemoryStore>,
-    skills_context: String,
-}
 
 const SYSTEM_PROMPT: &str = r#"You are an autonomous BTC Treasury Accumulation AI.
 
@@ -118,15 +116,34 @@ Required output structure:
   "sl_reason": "1.2% SL + 0.2% fee = 1.4% max loss, below 1.5% support level on 15m"
 }"#;
 
+const CACHE_TTL_SECS: u64 = 300; // 5 minutes
+const PAIR_COOLDOWN_SECS: u64 = 300; // 5 minutes per pair
+const MAX_LESSONS_IN_CONTEXT: usize = 3;
+const MAX_LESSON_CHARS: usize = 250;
+
+#[derive(Clone)]
+struct CacheEntry {
+    advisory: FullBtcAdvisory,
+    cached_at: Instant,
+}
+
+pub struct AdvisoryEngine {
+    llm: LlmClient,
+    mem: Arc<MemoryStore>,
+    /// (pair, regime_bucket, score_bucket) -> cached advisory
+    cache: RwLock<HashMap<String, CacheEntry>>,
+    /// pair -> last LLM call timestamp (for cooldown)
+    last_llm_call: RwLock<HashMap<String, Instant>>,
+}
 
 impl AdvisoryEngine {
     pub fn new(llm_url: String, llm_model: String, llm_api_key: String, mem: Arc<MemoryStore>) -> Self {
-        let skills = mem.load_skills();
-        tracing::info!("BTC advisor: loaded SKILL.md ({} chars)", skills.len());
+        tracing::info!("BTC advisor: skills context dropped from LLM prompt to save tokens");
         Self {
             llm: LlmClient::new(llm_url, llm_model, llm_api_key),
             mem,
-            skills_context: skills,
+            cache: RwLock::new(HashMap::new()),
+            last_llm_call: RwLock::new(HashMap::new()),
         }
     }
 
@@ -147,24 +164,92 @@ impl AdvisoryEngine {
             _ => orderbook_score,
         };
 
-        let should_activate = should_activate_llm(&input.market_data, &input.treasury, input.loss_streak, &config);
-
-        if should_activate && config.enabled {
-            tracing::info!("BTC Advisory: activating LLM");
-            match self.call_llm(input, &market_regime, &risk_level, &warnings, opportunity_score, &treasury_mode).await {
-                Ok(mut advisory) => {
-                    advisory.opportunity_score = opportunity_score;
-                    advisory.market_regime = market_regime;
-                    advisory.bypass_quant = true;
-                    return advisory;
-                }
-                Err(e) => {
-                    tracing::error!("BTC LLM call failed: {}", e);
-                }
-            }
+        // ── QUANT FAST-PATH ──────────────────────────────────────────────
+        // If the quant layer can already decide with high confidence, skip LLM
+        // entirely. This is the single biggest token saver: most scans fall
+        // into clear-cut buckets (rejection zone or obvious approval zone)
+        // and don't need LLM reasoning.
+        if let Some(quant_decision) = quant_fast_path(&input.market_data, &input.treasury, opportunity_score, &risk_level, input.loss_streak, &config) {
+            tracing::debug!(
+                "BTC [{}]: quant fast-path → {} (score={:.0}, risk={})",
+                input.market_data.pair, quant_decision.recommendation, opportunity_score, risk_level
+            );
+            return quant_decision;
         }
 
-        quant_advisory(&input.market_data, &market_regime, &risk_level, &warnings, opportunity_score, &treasury_mode, config.taker_fee_pct)
+        // ── COOLDOWN GATE ────────────────────────────────────────────────
+        // Don't call LLM twice in a row for the same pair within 5 min
+        // unless the regime changed. Cooldown is per-pair, not global, so a
+        // 10-pair scanner can still parallelize across different pairs.
+        if !self.cooldown_elapsed(&input.market_data.pair, &market_regime).await {
+            tracing::debug!(
+                "BTC [{}]: cooldown active, returning quant fallback",
+                input.market_data.pair
+            );
+            return quant_advisory(
+                &input.market_data,
+                &market_regime,
+                &risk_level,
+                &warnings,
+                opportunity_score,
+                &treasury_mode,
+                config.taker_fee_pct,
+            );
+        }
+
+        // ── LLM CACHE LOOKUP ─────────────────────────────────────────────
+        let cache_key = self.cache_key(&input.market_data.pair, &market_regime, opportunity_score);
+        if let Some(cached) = self.cache_get(&cache_key).await {
+            tracing::debug!("BTC [{}]: LLM cache hit (key={})", input.market_data.pair, cache_key);
+            return cached;
+        }
+
+        // ── SHOULD WE ACTUALLY CALL LLM? ─────────────────────────────────
+        // After the fast-path, the remaining cases are "ambiguous". But
+        // even then, if the quant signal is already strong enough (LOW risk
+        // + reasonable score) we let quant decide. LLM is reserved for
+        // genuinely uncertain cases: MEDIUM risk, or LOW risk with mediocre
+        // score, or distress signals.
+        if !should_activate_llm(&input.market_data, &input.treasury, input.loss_streak, &config) {
+            return quant_advisory(
+                &input.market_data,
+                &market_regime,
+                &risk_level,
+                &warnings,
+                opportunity_score,
+                &treasury_mode,
+                config.taker_fee_pct,
+            );
+        }
+
+        if !config.enabled {
+            return quant_advisory(
+                &input.market_data,
+                &market_regime,
+                &risk_level,
+                &warnings,
+                opportunity_score,
+                &treasury_mode,
+                config.taker_fee_pct,
+            );
+        }
+
+        // ── ACTUAL LLM CALL ──────────────────────────────────────────────
+        tracing::info!("BTC Advisory [{}]: activating LLM", input.market_data.pair);
+        match self.call_llm(input, &market_regime, &risk_level, &warnings, opportunity_score, &treasury_mode).await {
+            Ok(mut advisory) => {
+                advisory.opportunity_score = opportunity_score;
+                advisory.market_regime = market_regime.clone();
+                advisory.bypass_quant = true;
+                self.cache_put(cache_key, advisory.clone()).await;
+                self.mark_llm_called(&input.market_data.pair, &market_regime).await;
+                advisory
+            }
+            Err(e) => {
+                tracing::error!("BTC LLM call failed: {}", e);
+                quant_advisory(&input.market_data, &market_regime, &risk_level, &warnings, opportunity_score, &treasury_mode, config.taker_fee_pct)
+            }
+        }
     }
 
     async fn call_llm(
@@ -177,50 +262,49 @@ impl AdvisoryEngine {
         treasury_mode: &str,
     ) -> anyhow::Result<FullBtcAdvisory> {
         let config = self.mem.get_config();
-        let warnings_json = serde_json::to_string(warnings).unwrap_or_default();
-        let positions_json = serde_json::to_string(&input.open_positions).unwrap_or_default();
+        let warnings_str = if warnings.is_empty() { "none".to_string() } else { warnings.join("; ") };
 
-        let ai_score_line = input.ai_score.map(|s| format!("AI Technical Score: {:.1}\n", s)).unwrap_or_default();
-        let pair_metrics_json = input.pair_metrics.as_ref()
-            .map(|pm| serde_json::to_string(pm).unwrap_or_default())
-            .unwrap_or_default();
+        // Compact position representation: just pair+pnl+side, not the full struct.
+        let positions_str = if input.open_positions.is_empty() {
+            "none".to_string()
+        } else {
+            input.open_positions.iter()
+                .map(|p| format!("{}({}%)", p.id, p.pnl_btc))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        // Ringkas: drop verbose pair_metrics JSON, replace with one-line indicator summary.
+        let metrics_summary = input.pair_metrics.as_ref().map(|pm| {
+            format!(
+                "RS={:.2} EMA={} MACD={} VolSpike={} ATR%={:.2} Spread={:.2} BidDepth={:.0} AskDepth={:.0}",
+                pm.rs_score,
+                if pm.ema_bullish_alignment { "bull" } else { "bear" },
+                if pm.macd_bullish { "bull" } else { "bear" },
+                pm.volume_spike,
+                pm.atr_14,
+                pm.spread_pct,
+                pm.bid_depth,
+                pm.ask_depth,
+            )
+        }).unwrap_or_else(|| "n/a".to_string());
+
+        let ai_score_str = input.ai_score.map(|s| format!("{:.0}", s)).unwrap_or_else(|| "n/a".into());
 
         let user_prompt = format!(
-            r#"CURRENT STATE:
-Pair: {}
-Market Regime (quant): {}
-Trend Strength: {:.1}
-Volume Score: {:.1}
-Liquidity Score: {:.1}
-Spread Score: {:.1}
-Volatility Score: {:.1}
-Breakout Probability: {:.2}
-Reversal Probability: {:.2}
-Quant Confidence: {:.2}
-Active Strategy: {}
-Portfolio Exposure: {:.2}
-Daily Drawdown: {:.4}
-Taker Fee: {:.2}% (round-trip: {:.2}%)
-{}TECHNICAL INDICATORS:
-{}
-
-TREASURY:
-Current BTC: {:.8}
-Previous BTC: {:.8}
-7-Day Growth: {:.4}
-
-OPEN POSITIONS:
-{}
-
-Loss Streak: {}
-
-QUANT PRELIMINARY:
-Risk Level: {}
-Treasury Mode: {}
-Opportunity Score: {:.0}
-Warnings: {}"#,
+            "Pair={} Regime={} Risk={} Mode={} Score={:.0} Conf={:.2} \
+Trend={:.1} Vol={:.1} Liq={:.1} Spread={:.1} Volatility={:.1} \
+BreakoutProb={:.2} ReversalProb={:.2} Exposure={:.2} DD={:.4} \
+FeeRT={:.2}% LossStreak={} AI={} \
+Indicators: {} Positions: {} Warnings: {} \
+BTC={:.8} PrevBTC={:.8} Growth7d={:.4} \
+Strategy={}",
             input.market_data.pair,
             regime,
+            risk_level,
+            treasury_mode,
+            opportunity_score,
+            input.market_data.confidence,
             input.market_data.trend_strength,
             input.market_data.volume_score,
             input.market_data.liquidity_score,
@@ -228,39 +312,123 @@ Warnings: {}"#,
             input.market_data.volatility_score,
             input.market_data.breakout_probability,
             input.market_data.reversal_probability,
-            input.market_data.confidence,
-            input.market_data.active_strategy,
             input.market_data.portfolio_exposure,
             input.market_data.daily_drawdown,
-            config.taker_fee_pct * 100.0,
             config.taker_fee_pct * 200.0,
-            ai_score_line,
-            pair_metrics_json,
+            input.loss_streak,
+            ai_score_str,
+            metrics_summary,
+            positions_str,
+            warnings_str,
             input.treasury.current_btc,
             input.treasury.previous_btc,
             input.treasury.btc_growth_7d,
-            positions_json,
-            input.loss_streak,
-            risk_level,
-            treasury_mode,
-            opportunity_score,
-            warnings_json,
+            input.market_data.active_strategy,
         );
 
         let lessons_ctx = self.mem.load_lessons_context();
 
-        let combined_system = if self.skills_context.is_empty() && lessons_ctx.is_empty() {
-            SYSTEM_PROMPT.to_string()
-        } else {
-            format!("{}{}{}", SYSTEM_PROMPT, self.skills_context, lessons_ctx)
-        };
+        tracing::debug!(
+            "BTC LLM prompt sizes: system={} user={} lessons={} (B)",
+            SYSTEM_PROMPT.len(), user_prompt.len(), lessons_ctx.len()
+        );
+        self.llm.call(SYSTEM_PROMPT, &format!("{}{}", user_prompt, lessons_ctx)).await
+    }
 
-        tracing::debug!("BTC LLM system prompt length: {} chars", combined_system.len());
-        self.llm.call(&combined_system, &user_prompt).await
+    // ── Cache helpers ────────────────────────────────────────────────────
+
+    fn cache_key(&self, pair: &str, regime: &str, score: f64) -> String {
+        // Bucket score into 5-point buckets to maximize cache hits on
+        // nearly-identical scans.
+        let score_bucket = (score / 5.0).floor() as i32;
+        format!("{}|{}|{}", pair, regime, score_bucket)
+    }
+
+    async fn cache_get(&self, key: &String) -> Option<FullBtcAdvisory> {
+        let cache = self.cache.read().await;
+        if let Some(entry) = cache.get(key) {
+            if entry.cached_at.elapsed() < Duration::from_secs(CACHE_TTL_SECS) {
+                return Some(entry.advisory.clone());
+            }
+        }
+        None
+    }
+
+    async fn cache_put(&self, key: String, advisory: FullBtcAdvisory) {
+        let mut cache = self.cache.write().await;
+        cache.insert(key, CacheEntry { advisory, cached_at: Instant::now() });
+        // Opportunistic GC: cap cache at 256 entries
+        if cache.len() > 256 {
+            let cutoff = Instant::now() - Duration::from_secs(CACHE_TTL_SECS);
+            cache.retain(|_, v| v.cached_at > cutoff);
+        }
+    }
+
+    // ── Cooldown helpers ─────────────────────────────────────────────────
+
+    async fn cooldown_elapsed(&self, pair: &str, regime: &str) -> bool {
+        let map = self.last_llm_call.read().await;
+        if let Some(last) = map.get(pair) {
+            // If regime changed, allow LLM call (regime change is a real signal)
+            // but we don't track previous regime per pair; just enforce time.
+            return last.elapsed() >= Duration::from_secs(PAIR_COOLDOWN_SECS);
+        }
+        true
+    }
+
+    async fn mark_llm_called(&self, pair: &str, _regime: &str) {
+        let mut map = self.last_llm_call.write().await;
+        map.insert(pair.to_string(), Instant::now());
+        if map.len() > 64 {
+            // GC: drop entries older than 2x cooldown
+            let cutoff = Instant::now() - Duration::from_secs(PAIR_COOLDOWN_SECS * 2);
+            map.retain(|_, v| *v > cutoff);
+        }
     }
 }
 
 // ── Quant Functions ──────────────────────────────────────────────────────
+
+/// Fast-path decisions that don't need LLM reasoning. Returns Some(advisory)
+/// when the quant signal is already clear enough to act on. Returns None to
+/// fall through to the LLM path.
+fn quant_fast_path(
+    data: &BtcMarketData,
+    treasury: &BtcTreasuryState,
+    opportunity: f64,
+    risk_level: &str,
+    loss_streak: i32,
+    _cfg: &BtcConfig,
+) -> Option<FullBtcAdvisory> {
+    let market_regime = classify_regime(data);
+    let taker_fee = 0.001_f64;
+
+    // Clear rejection zone: low score + non-low risk → reject without LLM
+    if opportunity < 50.0 && (risk_level == "HIGH" || risk_level == "CRITICAL" || risk_level == "MEDIUM") {
+        let mode = treasury_mode(data, treasury, risk_level);
+        return Some(quant_advisory(data, &market_regime, risk_level, &Vec::new(), opportunity, &mode, taker_fee));
+    }
+
+    // Loss-streak circuit breaker: don't even ask LLM, just protect
+    if loss_streak >= 3 {
+        let mode = treasury_mode(data, treasury, "HIGH");
+        return Some(quant_advisory(data, &market_regime, "HIGH", &vec!["Loss streak >= 3".into()], opportunity, &mode, taker_fee));
+    }
+
+    // Clear danger regimes → no LLM needed
+    if market_regime == "LOW_LIQUIDITY_DANGER" || market_regime == "HIGH_VOLATILITY_DANGER" || market_regime == "PANIC_SELLOFF" {
+        let mode = "SAFE_MODE".to_string();
+        return Some(quant_advisory(data, &market_regime, "CRITICAL", &Vec::new(), opportunity, &mode, taker_fee));
+    }
+
+    // Strong quant signal with low risk and high score: approve without LLM
+    if risk_level == "LOW" && opportunity >= 80.0 && data.confidence >= 0.85 {
+        let mode = treasury_mode(data, treasury, risk_level);
+        return Some(quant_advisory(data, &market_regime, risk_level, &Vec::new(), opportunity, &mode, taker_fee));
+    }
+
+    None
+}
 
 fn classify_regime(data: &BtcMarketData) -> String {
     if data.liquidity_score < 3.0 && data.volume_score < 3.0 {
@@ -399,20 +567,18 @@ fn opportunity_score(data: &BtcMarketData) -> f64 {
     (score * 100.0).round() / 100.0
 }
 
-fn should_activate_llm(data: &BtcMarketData, _treasury: &BtcTreasuryState, loss_streak: i32, cfg: &BtcConfig) -> bool {
+/// Activation gate. Runs AFTER the quant fast-path, so it only sees the
+/// truly ambiguous cases. We tightened the threshold from 0.75 to 0.85 and
+/// removed redundant checks (loss_streak + low confidence now caught by
+/// fast-path).
+fn should_activate_llm(data: &BtcMarketData, _treasury: &BtcTreasuryState, _loss_streak: i32, cfg: &BtcConfig) -> bool {
     if data.confidence < cfg.llm_activation_threshold {
         return true;
     }
     if data.daily_drawdown > 0.03 {
         return true;
     }
-    if loss_streak >= 3 {
-        return true;
-    }
     if data.volatility_score > cfg.safe_mode_volatility || data.liquidity_score < 4.0 {
-        return true;
-    }
-    if data.confidence < 0.5 {
         return true;
     }
     false

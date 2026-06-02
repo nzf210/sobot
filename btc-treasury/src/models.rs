@@ -370,7 +370,7 @@ impl Default for BtcConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            llm_activation_threshold: 0.75,
+            llm_activation_threshold: 0.85,
             min_confidence: 0.80,
             max_exposure: 0.50,
             daily_loss_limit_btc: 0.0005,
