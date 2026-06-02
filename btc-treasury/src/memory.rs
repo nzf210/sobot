@@ -4,21 +4,57 @@ use std::sync::RwLock;
 
 use crate::models::*;
 
+/// Per-account state store. When `account_id` is `None` the store reads/writes
+/// the legacy flat layout under `data_dir` (btc-treasury.json, etc.) — this
+/// preserves backward compatibility for users running a single `default`
+/// Binance account with the pre-Fase-1 setup. When `account_id` is `Some(id)`,
+/// state lives under `data_dir/accounts/{id}/` so two accounts can never race
+/// on the same JSON file.
 pub struct MemoryStore {
     data_dir: PathBuf,
+    account_dir: PathBuf,
+    account_id: Option<String>,
     lock: RwLock<()>,
 }
 
 impl MemoryStore {
+    /// Build a store rooted at `data_dir` for the default (legacy) account.
+    /// Files live directly in `data_dir` (e.g. `btc-treasury.json`).
     pub fn new(data_dir: &str) -> Self {
+        Self::with_account(data_dir, None)
+    }
+
+    /// Build a store scoped to a specific account. Pass `Some("default")` or
+    /// `None` to use the legacy flat layout; pass any other id to use the
+    /// per-account subdir `data_dir/accounts/{id}/`.
+    pub fn with_account(data_dir: &str, account_id: Option<&str>) -> Self {
         let dir = PathBuf::from(data_dir);
         fs::create_dir_all(&dir).expect("Failed to create data directory");
+
+        // Per-account path: only when account_id is Some(non-default).
+        // "default" maps to the legacy flat layout so the single-account
+        // upgrade path keeps the user's existing files intact.
+        let use_subdir = matches!(account_id, Some(id) if !id.is_empty() && id != "default");
+        let account_dir = if use_subdir {
+            let sub = dir.join("accounts").join(account_id.unwrap());
+            fs::create_dir_all(&sub).expect("Failed to create account data directory");
+            sub
+        } else {
+            dir.clone()
+        };
+
         let store = Self {
             data_dir: dir,
+            account_dir,
+            account_id: account_id.map(|s| s.to_string()),
             lock: RwLock::new(()),
         };
         store.init_defaults();
         store
+    }
+
+    pub fn account_id(&self) -> Option<&str> {
+        self.account_id.as_deref()
     }
 
     fn init_defaults(&self) {
@@ -30,9 +66,10 @@ impl MemoryStore {
             ("btc-lessons.json", "[]"),
         ];
 
-        // Write SKILL.md from source if exists, otherwise create default.
-        // The Docker image bakes SKILL.md into the working directory; if not
-        // found there, also check the project root (../SKILL.md) for dev mode.
+        // SKILL.md stays in the data_dir root (it's the bot's persona file
+        // and is shared across all accounts). The account_dir defaults also
+        // link to the same content via a relative path so a per-account
+        // override can drop in later without changing the read path.
         let skill_path = self.data_dir.join("SKILL.md");
         if !skill_path.exists() {
             let skill_content = ["SKILL.md", "../SKILL.md", "/app/SKILL.md"]
@@ -45,7 +82,7 @@ impl MemoryStore {
         }
 
         for (filename, content) in defaults {
-            let path = self.data_dir.join(filename);
+            let path = self.account_dir.join(filename);
             if !path.exists() {
                 fs::write(&path, content).expect("Failed to write default file");
             }
@@ -54,7 +91,7 @@ impl MemoryStore {
 
     fn read_json<T: serde::de::DeserializeOwned>(&self, filename: &str, default: T) -> T {
         let _guard = self.lock.read().unwrap();
-        let path = self.data_dir.join(filename);
+        let path = self.account_dir.join(filename);
         fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
@@ -67,8 +104,8 @@ impl MemoryStore {
     /// otherwise lose the entire position history on next boot).
     fn write_json<T: serde::Serialize>(&self, filename: &str, data: &T) {
         let _guard = self.lock.write().unwrap();
-        let path = self.data_dir.join(filename);
-        let tmp_path = self.data_dir.join(format!("{}.tmp", filename));
+        let path = self.account_dir.join(filename);
+        let tmp_path = self.account_dir.join(format!("{}.tmp", filename));
         let json = serde_json::to_string_pretty(data).expect("Failed to serialize");
         if let Err(e) = fs::write(&tmp_path, &json) {
             tracing::error!("memory: failed to write tmp {}: {}", tmp_path.display(), e);
@@ -204,8 +241,8 @@ impl MemoryStore {
 
     pub fn log_decision(&self, record: BtcDecisionRecord) {
         let _guard = self.lock.write().unwrap();
-        let path = self.data_dir.join("btc-decision-log.json");
-        let tmp_path = self.data_dir.join("btc-decision-log.json.tmp");
+        let path = self.account_dir.join("btc-decision-log.json");
+        let tmp_path = self.account_dir.join("btc-decision-log.json.tmp");
         let mut records: Vec<BtcDecisionRecord> = fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
@@ -241,8 +278,8 @@ impl MemoryStore {
     #[allow(dead_code)]
     pub fn save_positions(&self, positions: &[BtcAdvisoryPosition]) {
         let _guard = self.lock.write().unwrap();
-        let path = self.data_dir.join("btc-positions.json");
-        let tmp_path = self.data_dir.join("btc-positions.json.tmp");
+        let path = self.account_dir.join("btc-positions.json");
+        let tmp_path = self.account_dir.join("btc-positions.json.tmp");
         let json = serde_json::to_string_pretty(positions).expect("Failed to serialize");
         if fs::write(&tmp_path, &json).is_err() {
             tracing::error!("memory: failed to write positions tmp");
@@ -260,8 +297,8 @@ impl MemoryStore {
 
     pub fn add_lesson(&self, lesson: String) {
         let _guard = self.lock.write().unwrap();
-        let path = self.data_dir.join("btc-lessons.json");
-        let tmp_path = self.data_dir.join("btc-lessons.json.tmp");
+        let path = self.account_dir.join("btc-lessons.json");
+        let tmp_path = self.account_dir.join("btc-lessons.json.tmp");
         let mut lessons: Vec<String> = fs::read_to_string(&path)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
@@ -352,6 +389,7 @@ impl MemoryStore {
     }
 
     pub fn load_skills(&self) -> String {
+        // SKILL.md is shared across accounts and lives in the data_dir root.
         let path = self.data_dir.join("SKILL.md");
         fs::read_to_string(&path).unwrap_or_default()
     }
@@ -379,5 +417,51 @@ impl MemoryStore {
             out.push_str(&format!("{}. {}\n", i + 1, truncated));
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_account_uses_legacy_flat_layout() {
+        let tmp = tempfile_or("./data/memory_test_legacy");
+        let store = MemoryStore::new(&tmp);
+        // Legacy: file should be at data_dir/btc-treasury.json
+        let legacy = std::path::Path::new(&tmp).join("btc-treasury.json");
+        assert!(legacy.exists(), "default account must use flat layout, expected {}", legacy.display());
+        assert!(store.account_id().is_none());
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn default_string_account_uses_legacy_layout() {
+        // `Some("default")` is treated as the legacy single-account case so
+        // an explicit "default" account (e.g. from the loader) does not
+        // accidentally create a subdir and orphan the user's files.
+        let tmp = "./data/memory_test_default_str";
+        let store = MemoryStore::with_account(tmp, Some("default"));
+        let legacy = std::path::Path::new(tmp).join("btc-treasury.json");
+        assert!(legacy.exists());
+        assert_eq!(store.account_id(), Some("default"));
+        std::fs::remove_dir_all(tmp).ok();
+    }
+
+    #[test]
+    fn named_account_uses_subdir() {
+        let tmp = "./data/memory_test_named";
+        let store = MemoryStore::with_account(tmp, Some("alpha"));
+        let sub = std::path::Path::new(tmp).join("accounts").join("alpha").join("btc-treasury.json");
+        assert!(sub.exists(), "named account must use subdir, expected {}", sub.display());
+        // Legacy flat layout must NOT receive the named account's state.
+        let legacy = std::path::Path::new(tmp).join("btc-treasury.json");
+        assert!(!legacy.exists(), "named account must not write to legacy flat file");
+        assert_eq!(store.account_id(), Some("alpha"));
+        std::fs::remove_dir_all(tmp).ok();
+    }
+
+    fn tempfile_or(p: &str) -> String {
+        p.to_string()
     }
 }

@@ -6,6 +6,7 @@ use teloxide::prelude::*;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
+use crate::account_runtime::AccountRuntime;
 use crate::engine::AdvisoryEngine;
 use crate::engines::risk_manager::RiskManager;
 use crate::exchange::ExchangeClient;
@@ -149,6 +150,14 @@ pub struct BtcBot {
     mem: Arc<MemoryStore>,
     exchange: Option<Arc<dyn ExchangeClient>>,
     scanner: Option<Arc<ScannerState>>,
+    /// Per-account runtimes, keyed by `account_id`. The bot looks up
+    /// `active_account[chat_id]` to pick which runtime handles this chat.
+    /// With one `default` account the map has one entry, so legacy behavior
+    /// is preserved automatically.
+    per_account: HashMap<String, Arc<AccountRuntime>>,
+    /// Per-chat active account id. Defaults to `"default"` for chats that
+    /// have not yet called `/btc_use <id>`.
+    active_account: RwLock<HashMap<i64, String>>,
 }
 
 impl Clone for BtcBot {
@@ -160,6 +169,8 @@ impl Clone for BtcBot {
             mem: Arc::clone(&self.mem),
             exchange: self.exchange.clone(),
             scanner: self.scanner.clone(),
+            per_account: self.per_account.clone(),
+            active_account: RwLock::new(self.active_account.blocking_read().clone()),
         }
     }
 }
@@ -172,8 +183,37 @@ impl BtcBot {
         mem: Arc<MemoryStore>,
         exchange: Option<Arc<dyn ExchangeClient>>,
         scanner: Option<Arc<ScannerState>>,
+        per_account: HashMap<String, Arc<AccountRuntime>>,
     ) -> Self {
-        Self { token, whitelist, engine, mem, exchange, scanner }
+        Self {
+            token,
+            whitelist,
+            engine,
+            mem,
+            exchange,
+            scanner,
+            per_account,
+            active_account: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Resolve the active `AccountRuntime` for a chat. Returns the chat's
+    /// active account if it's still configured, otherwise the single-account
+    /// default, otherwise `None`. The bot uses this to switch its
+    /// `mem`/`exchange` view per-command in multi-account mode.
+    async fn resolve_runtime(&self, chat_id: i64) -> Option<Arc<AccountRuntime>> {
+        // Single-account case: the per_account map has at most one entry and
+        // it must be the default. Skip the lock and return it directly so
+        // legacy chats get the same fast path as before.
+        if self.per_account.len() == 1 {
+            return self.per_account.values().next().cloned();
+        }
+        let active = self.active_account.read().await;
+        let id = active
+            .get(&chat_id)
+            .cloned()
+            .or_else(|| self.per_account.keys().next().cloned());
+        id.and_then(|k| self.per_account.get(&k).cloned())
     }
 
     // ── lifecycle ──────────────────────────────────────────────────────────
@@ -295,6 +335,9 @@ impl BtcBot {
             "btcdryrun" => self.cmd_dryrun(bot, msg, args).await,
             "btcpause" => self.cmd_pause(bot, msg).await,
             "btcresume" => self.cmd_resume(bot, msg).await,
+            "btcuse" => self.cmd_use(bot, msg, args).await,
+            "btcaccounts" => self.cmd_accounts(bot, msg).await,
+            "btcaggregate" => self.cmd_aggregate(bot, msg).await,
             "start" => self.cmd_help(bot, msg).await,
             _ => bot_send_plain(bot, msg, "Unknown command. Use /help").await,
         };
@@ -1747,6 +1790,110 @@ impl BtcBot {
         ts.trading_paused_until = String::new();
         self.mem.save_treasury_state(ts);
         send_mdv2_safe(bot, msg.chat.id, "▶️ *Trading RESUMED*\nAll commands and auto-execution are now active.").await?;
+        Ok(())
+    }
+
+    /// /btc_use <id> — set this chat's active account. With one `default`
+    /// account configured the command is a no-op (returns the same account).
+    async fn cmd_use(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
+        let id = match args {
+            Some(ref s) if !s.trim().is_empty() => s.trim().to_string(),
+            _ => {
+                bot_send_plain(bot, msg, "Usage: /btc_use <account_id>\nUse /btc_accounts to list configured accounts.").await?;
+                return Ok(());
+            }
+        };
+        if !self.per_account.contains_key(&id) {
+            let available: Vec<String> = self.per_account.keys().cloned().collect();
+            bot_send_plain(bot, msg, &format!("Account '{}' not configured. Available: {}", id, available.join(", "))).await?;
+            return Ok(());
+        }
+        let mut active = self.active_account.write().await;
+        active.insert(msg.chat.id.0, id.clone());
+        bot_send_plain(bot, msg, &format!("✅ Active account for this chat: *{}*", escape_mdv2(&id))).await?;
+        Ok(())
+    }
+
+    /// /btc_accounts — list all configured accounts with id, exchange, and
+    /// current chat selection. With a single `default` account this shows
+    /// one row and the chat is auto-bound to it.
+    async fn cmd_accounts(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
+        if self.per_account.is_empty() {
+            send_mdv2_safe(bot, msg.chat.id, "No accounts configured. Set BINANCE_API_KEY to enable the default account.").await?;
+            return Ok(());
+        }
+        let active = self.active_account.read().await;
+        let current = active.get(&msg.chat.id.0).cloned()
+            .or_else(|| self.per_account.keys().next().cloned())
+            .unwrap_or_default();
+        let mut lines: Vec<String> = vec![format!("📋 *Accounts* ({})\n", self.per_account.len())];
+        for (id, rt) in &self.per_account {
+            let marker = if id == &current { "▶️" } else { "  " };
+            let api = rt.exchange.api_key_display();
+            let balance = match rt.exchange.get_balances().await {
+                Ok(b) => b,
+                Err(e) => {
+                    lines.push(format!("{} *{}* — `{}` (balance fetch failed: {})", marker, escape_mdv2(id), escape_mdv2(&api), e));
+                    continue;
+                }
+            };
+            let btc = balance.iter().find(|b| b.asset == "BTC").map(|b| b.free + b.locked).unwrap_or(0.0);
+            let usdt = balance.iter().find(|b| b.asset == "USDT" || b.asset == "USDC").map(|b| b.free + b.locked).unwrap_or(0.0);
+            lines.push(format!(
+                "{} *{}* — `{}`\n     BTC: {:.8} | USDT: {:.2}",
+                marker,
+                escape_mdv2(id),
+                escape_mdv2(&api),
+                btc,
+                usdt
+            ));
+        }
+        lines.push(String::new());
+        lines.push(format!("Active: *{}*\nUse /btc_use <id> to switch.", escape_mdv2(&current)));
+        send_mdv2_safe(bot, msg.chat.id, &lines.join("\n")).await?;
+        Ok(())
+    }
+
+    /// /btc_aggregate — rollup of all accounts' BTC + PnL. Per-account line
+    /// + grand total. Pulls from each `AccountRuntime`'s `MemoryStore`
+    /// (per-account state, no cross-account bleed).
+    async fn cmd_aggregate(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
+        if self.per_account.is_empty() {
+            send_mdv2_safe(bot, msg.chat.id, "No accounts configured").await?;
+            return Ok(());
+        }
+        let mut total_btc = 0.0;
+        let mut total_vault = 0.0;
+        let mut total_compound = 0.0;
+        let mut total_trades: u64 = 0;
+        let mut total_wins: u64 = 0;
+        let mut lines: Vec<String> = vec!["📊 *Aggregate — All Accounts*\n".into()];
+        for (id, rt) in &self.per_account {
+            let ts = rt.mem.get_treasury_state();
+            total_btc += ts.current_btc;
+            total_vault += ts.btc_treasury_vault;
+            total_compound += ts.compound_balance;
+            total_trades += ts.total_trades as u64;
+            total_wins += ts.winning_trades as u64;
+            let win_rate = if ts.total_trades > 0 {
+                ts.winning_trades as f64 / ts.total_trades as f64 * 100.0
+            } else { 0.0 };
+            lines.push(format!(
+                "*{}*: BTC {:.8} | Vault {:.8} | Trades {} (win {:.0}%)",
+                escape_mdv2(id),
+                ts.current_btc,
+                ts.btc_treasury_vault,
+                ts.total_trades,
+                win_rate,
+            ));
+        }
+        let overall_wr = if total_trades > 0 { total_wins as f64 / total_trades as f64 * 100.0 } else { 0.0 };
+        lines.push(String::new());
+        lines.push(format!(
+            "*Total*\nBTC: {:.8}\nVault: {:.8}\nCompound: {:.8}\nTrades: {} (win {:.0}%)",
+            total_btc, total_vault, total_compound, total_trades, overall_wr
+        ));
+        send_mdv2_safe(bot, msg.chat.id, &lines.join("\n")).await?;
         Ok(())
     }
 }
