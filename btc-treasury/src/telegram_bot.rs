@@ -42,7 +42,8 @@ const HELP_TEXT: &str = r#"🤖 *BTC Treasury Accumulation*
 
 *Pair Management \(BTC‑Quote\)*
 /btc_pairs — List active scanned pairs
-/btc_addpair \<PAIR\> — Add pair \(e\.g\. SOLBTC, ETHBTC, SUIBTC\)
+/btc_addpair \<PAIR\> — Add a single pair \(e\.g\. SOLBTC, ETHBTC, SUIBTC\)
+/btc_addpairs \<PAIR1\> \<PAIR2\> … — Add multiple pairs in one command \(Binance only\)
 /btc_removepair \<PAIR\> — Remove pair from scanner
 /btc_discover — Auto\-discover all BTC\-quote pairs on the bound exchange
 /btc_pairinfo \<PAIR\> — AI scores for one pair
@@ -340,6 +341,7 @@ impl BtcBot {
             "btcskills" => self.cmd_skills(bot, msg).await,
             "btcpairs" => self.cmd_pairs(bot, msg).await,
             "btcaddpair" => self.cmd_addpair(bot, msg, args).await,
+            "btcaddpairs" => self.cmd_addpairs(bot, msg, args).await,
             "btcremovepair" => self.cmd_removepair(bot, msg, args).await,
             "btcdiscover" => self.cmd_discover(bot, msg).await,
             "btcpairinfo" => self.cmd_pairinfo(bot, msg, args).await,
@@ -733,25 +735,16 @@ impl BtcBot {
 
     /// /btc_addpair <PAIR> — add a BTC-quote pair to the scanner.
     async fn cmd_addpair(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
-        let pair = match args {
-            Some(ref p) if !p.trim().is_empty() => p.trim().to_uppercase(),
-            _ => {
-                bot_send_plain(bot, msg, "Usage: /btc_addpair <PAIR>\nExamples:\n  /btc_addpair SOLBTC\n  /btc_addpair ETHBTC\n  /btc_addpair SUIBTC\n\nOr use /btc_discover to auto-add all BTC-quote pairs").await?;
+        let pair = match validate_pair_token(args.as_deref().unwrap_or("")) {
+            Ok(p) => p,
+            Err(reason) => {
+                bot_send_plain(bot, msg, &format!(
+                    "Usage: /btc_addpair <PAIR>\n\n{}\n\nExamples:\n  /btc_addpair SOLBTC\n  /btc_addpair ETHBTC\n  /btc_addpair SUIBTC\n\nOr use /btc_addpairs to add several at once, or /btc_discover for the full universe.",
+                    reason
+                )).await?;
                 return Ok(());
             }
         };
-
-        // Validate format
-        if pair.len() > 15 || !pair.chars().all(|c| c.is_ascii_alphanumeric()) {
-            bot_send_plain(bot, msg, &format!("Invalid pair name: '{}'", pair)).await?;
-            return Ok(());
-        }
-
-        // Must end with BTC (case-insensitive check)
-        if !pair.to_uppercase().ends_with("BTC") {
-            bot_send_plain(bot, msg, &format!("'{}' is not a BTC-quote pair. Use format: SYMBOLBTC\nExamples: SOLBTC, ETHBTC, DOGEBTC", pair)).await?;
-            return Ok(());
-        }
 
         let rt = match self.resolve_runtime(msg.chat.id.0).await {
             Some(rt) => rt,
@@ -764,11 +757,14 @@ impl BtcBot {
         let exchange = rt.exchange.as_ref();
         let mem = rt.mem.as_ref();
 
-        // Validate pair exists on Binance
+        // Validate pair exists on the bound exchange. Note: validate_symbol
+        // is expensive (full exchangeInfo fetch) but for a single pair it's
+        // fine — the multi-pair /btc_addpairs command avoids this cost by
+        // calling discover_btc_pairs() once.
         match exchange.validate_symbol(&pair).await {
             Ok(true) => {}
             Ok(false) => {
-                bot_send_plain(bot, msg, &format!("Pair '{}' not found on Binance or not trading", pair)).await?;
+                bot_send_plain(bot, msg, &format!("Pair '{}' not found on {} or not trading", pair, exchange.exchange_name())).await?;
                 return Ok(());
             }
             Err(e) => {
@@ -786,6 +782,118 @@ impl BtcBot {
         } else {
             bot_send_plain(bot, msg, &format!("'{}' already in scanner", pair)).await?;
         }
+        Ok(())
+    }
+
+    /// /btc_addpairs <PAIR1> <PAIR2> [PAIR3 ...] — add multiple BTC-quote pairs
+    /// to the scanner in a single invocation. Whitespace- and comma-separated.
+    /// Validates the input list against the live Binance pair universe via one
+    /// `discover_btc_pairs()` call (one exchangeInfo round-trip, regardless of
+    /// how many pairs the user supplied), so adding 20 pairs is the same cost
+    /// as adding 1.
+    ///
+    /// For exchanges that don't implement `discover_btc_pairs` (e.g. OKX), the
+    /// user is directed back to the single-pair `/btc_addpair` command.
+    async fn cmd_addpairs(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
+        // Split on whitespace OR commas so both "SOLBTC ETHBTC" and
+        // "SOLBTC, ETHBTC, SUIBTC" work. Empty fragments are dropped.
+        let raw = args.unwrap_or_default();
+        let tokens: Vec<String> = raw
+            .split(|c: char| c.is_whitespace() || c == ',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        if tokens.is_empty() {
+            bot_send_plain(bot, msg, "Usage: /btc_addpairs <PAIR1> <PAIR2> [PAIR3 ...]\nExamples:\n  /btc_addpairs SOLBTC ETHBTC\n  /btc_addpairs SOLBTC, ETHBTC, SUIBTC\n\nOr use /btc_addpair for a single pair.").await?;
+            return Ok(());
+        }
+        if tokens.len() == 1 {
+            // Soft nudge — single-pair input works fine, but the singular
+            // command is a clearer affordance.
+            let _ = bot_send_plain(bot, msg, "Tip: for a single pair, use /btc_addpair <PAIR>").await;
+        }
+
+        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+            Some(rt) => rt,
+            None => {
+                bot_send_plain(bot, msg, "Scanner not active (exchange not configured)").await?;
+                return Ok(());
+            }
+        };
+        let scanner = rt.scanner_state.as_ref();
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
+
+        // Fetch the live BTC-quote universe ONCE. This is the whole point of
+        // the multi-pair command — N pairs = 1 API call, not N.
+        let valid_set: std::collections::HashSet<String> = match exchange.discover_btc_pairs().await {
+            Ok(v) => v.into_iter().map(|s| s.to_uppercase()).collect(),
+            Err(e) => {
+                bot_send_plain(bot, msg, &format!(
+                    "Multi-pair discovery not supported on {} ({}). Add pairs one at a time with /btc_addpair <PAIR>.",
+                    exchange.exchange_name(), e
+                )).await?;
+                return Ok(());
+            }
+        };
+
+        if valid_set.is_empty() {
+            // Shouldn't happen on a healthy exchange, but guard against a
+            // silent zero-length response (which would mark every pair as
+            // "not found").
+            bot_send_plain(bot, msg, &format!(
+                "Live pair list came back empty from {}. Try again in a few seconds, or use /btc_addpair per pair.",
+                exchange.exchange_name()
+            )).await?;
+            return Ok(());
+        }
+
+        // Per-pair status tracking. Order preserved from input.
+        let mut lines: Vec<String> = Vec::with_capacity(tokens.len() + 2);
+        let mut added = 0usize;
+        let mut dupes = 0usize;
+        let mut invalid = 0usize;
+        let mut not_found = 0usize;
+
+        for token in &tokens {
+            let pair = match validate_pair_token(token) {
+                Ok(p) => p,
+                Err(reason) => {
+                    lines.push(format!("❌ {} — {}", token, reason));
+                    invalid += 1;
+                    continue;
+                }
+            };
+            if !valid_set.contains(&pair) {
+                lines.push(format!("❌ {} — not found on {} (or not trading)", pair, exchange.exchange_name()));
+                not_found += 1;
+                continue;
+            }
+            if scanner.add_pair(&pair).await {
+                lines.push(format!("✅ {} — added", pair));
+                added += 1;
+            } else {
+                lines.push(format!("⚠️ {} — already in scanner", pair));
+                dupes += 1;
+            }
+        }
+
+        // Single config save after the loop — avoid N writes to disk.
+        if added > 0 {
+            let pairs = scanner.get_pairs().await;
+            let mut cfg = mem.get_config();
+            cfg.scanner_pairs = pairs.clone();
+            mem.save_config(&cfg);
+        }
+
+        let text = format!(
+            "*Add Multiple Pairs — [{}]*\n\n{}\n\n*Summary:* {} added, {} duplicates, {} not found, {} invalid",
+            escape_mdv2(exchange.exchange_name()),
+            lines.join("\n"),
+            added, dupes, not_found, invalid,
+        );
+        send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
 
@@ -2285,4 +2393,49 @@ fn score_bar(score: f64) -> String {
 fn is_btc_quote_pair(pair: &str) -> bool {
     let p = pair.to_uppercase();
     p.ends_with("BTC") && p != "BTCUSDT"
+}
+
+/// Normalize and validate a BTC-quote pair token from user input.
+/// Returns the normalized uppercase pair on success, or a human-readable
+/// error string on failure. Used by both `/btc_addpair` and `/btc_addpairs`
+/// so the single-pair and multi-pair commands share identical validation.
+///
+/// Rules:
+///   - Non-empty after trim
+///   - Max 15 characters
+///   - All ASCII alphanumeric (A-Z, 0-9) — case-insensitive input
+///   - Must end with `BTC` (so `SOLUSDT` is rejected; only quote-BTC pairs)
+fn validate_pair_token(raw: &str) -> Result<String, String> {
+    let pair = raw.trim().to_uppercase();
+    if pair.is_empty() {
+        return Err("pair name is empty".to_string());
+    }
+    if pair.len() > 15 || !pair.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(format!(
+            "'{}' is not a valid pair name (max 15 alphanumeric chars)",
+            raw.trim()
+        ));
+    }
+    if !pair.ends_with("BTC") {
+        return Err(format!(
+            "'{}' is not a BTC-quote pair (must end with BTC, e.g. SOLBTC, ETHBTC)",
+            raw.trim().to_uppercase()
+        ));
+    }
+    Ok(pair)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_pair_token() {
+        assert_eq!(validate_pair_token("solbtc").unwrap(), "SOLBTC");
+        assert_eq!(validate_pair_token("  ethbtc  ").unwrap(), "ETHBTC");
+        assert_eq!(validate_pair_token("BTCUSDT").unwrap_err().contains("must end with BTC"), true);
+        assert_eq!(validate_pair_token("").unwrap_err().contains("empty"), true);
+        assert_eq!(validate_pair_token("sol-btc").unwrap_err().contains("not a valid pair name"), true);
+        assert_eq!(validate_pair_token("thispairiswaytoolongbtc").unwrap_err().contains("not a valid pair name"), true);
+    }
 }

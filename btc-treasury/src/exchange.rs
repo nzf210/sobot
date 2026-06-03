@@ -43,6 +43,16 @@ pub trait ExchangeClient: Send + Sync {
     /// Validate if a symbol is tradeable
     async fn validate_symbol(&self, symbol: &str) -> Result<bool>;
 
+    /// Discover all BTC-quote pairs currently trading on this exchange.
+    /// Used by `/btc_addpairs` to validate user input against the live pair
+    /// universe in a single API call (instead of N `validate_symbol` calls,
+    /// each of which fetches the full exchangeInfo endpoint).
+    /// Default impl returns Err so non-Binance exchanges (OKX) get a clear
+    /// "not supported" message without code changes.
+    async fn discover_btc_pairs(&self) -> Result<Vec<String>> {
+        Err(anyhow::anyhow!("discover_btc_pairs not implemented for this exchange"))
+    }
+
     /// Get current price for a symbol (for position monitoring)
     async fn get_current_price(&self, symbol: &str) -> Result<f64>;
 
@@ -173,6 +183,10 @@ impl ExchangeClient for BinanceClient {
 
     async fn validate_symbol(&self, symbol: &str) -> Result<bool> {
         self.validate_symbol(symbol).await
+    }
+
+    async fn discover_btc_pairs(&self) -> Result<Vec<String>> {
+        Self::discover_btc_pairs(self).await
     }
 
     async fn get_current_price(&self, symbol: &str) -> Result<f64> {
