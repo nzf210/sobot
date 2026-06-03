@@ -9,6 +9,7 @@ use tokio::time::{interval, Duration};
 use crate::engine::AdvisoryEngine;
 use crate::engines::ai_scoring::AIScoringEngine;
 use crate::engines::risk_manager::RiskManager;
+use crate::engines::volume_engine::VolumeEngine;
 use crate::execution_engine::ExecutionEngine;
 use crate::exchange::{ExchangeClient};
 use crate::indicators::Indicators;
@@ -289,7 +290,16 @@ async fn scan_pair(
             let candles_4h = exchange.get_klines(pair, "4h", 50).await.unwrap_or_default();
             let btc_15m = exchange.get_klines("BTCUSDT", "15m", 200).await.unwrap_or_default();
 
-            let metrics = compute_pair_metrics(&candles_15m, &candles_1h, &candles_4h, &btc_15m, pair);
+            let mut metrics = compute_pair_metrics(&candles_15m, &candles_1h, &candles_4h, &btc_15m, pair);
+            // Populate live orderbook metrics from BtcMarketData
+            metrics.spread_pct = (10.0 - market_data.spread_score) / 20.0;
+            metrics.wide_spread = metrics.spread_pct >= 0.5;
+            let min_depth = market_data.liquidity_score * 50.0;
+            metrics.bid_depth = min_depth;
+            metrics.ask_depth = min_depth;
+            metrics.liquidity_growth = metrics.volume_growth > 0.0;
+            metrics.wash_trade_detected = VolumeEngine::is_wash_trade(&metrics);
+
             let risk_assessment = RiskManager::assess(
                 &treasury,
                 mem.get_positions().len() as i32,
@@ -513,10 +523,18 @@ fn compute_pair_metrics(
     let close_15m = candles_15m.last().map(|c| c.close).unwrap_or(0.0);
     let close_1h = candles_1h.last().map(|c| c.close).unwrap_or(0.0);
     let close_4h = candles_4h.last().map(|c| c.close).unwrap_or(0.0);
+    // 1d close: use the return from 6 bars back on 4h candles (≈ 24h ago)
+    let close_1d = if candles_4h.len() >= 7 {
+        candles_4h[candles_4h.len() - 7].close
+    } else {
+        close_4h
+    };
 
     let volume_15m = candles_15m.last().map(|c| c.volume).unwrap_or(0.0);
     let volume_1h = candles_1h.last().map(|c| c.volume).unwrap_or(0.0);
     let volume_4h = candles_4h.last().map(|c| c.volume).unwrap_or(0.0);
+    // 1d volume: sum of the last 6 4h bars (~24h worth)
+    let volume_1d: f64 = candles_4h.iter().rev().take(6).map(|c| c.volume).sum();
 
     let atr_14 = Indicators::atr(candles_15m, 14);
     let rsi_14 = Indicators::rsi(candles_15m, 14);
@@ -529,18 +547,21 @@ fn compute_pair_metrics(
     let coin_ret_15m = Indicators::return_since(candles_15m, 1);
     let coin_ret_1h = Indicators::return_since(candles_1h, 1);
     let coin_ret_4h = Indicators::return_since(candles_4h, 1);
+    // 1d return: 6 4h-bars back = 24h
     let coin_ret_1d = Indicators::return_since(candles_4h, 6);
 
+    // BTC returns from 15m candles (96 bars = 24h, 16 bars = 4h, 4 bars = 1h)
     let btc_ret_15m = Indicators::return_since(btc_15m, 1);
-    let btc_ret_1h = Indicators::return_since(btc_15m, 4);
-    let btc_ret_4h = Indicators::return_since(btc_15m, 16);
-    let btc_ret_1d = Indicators::return_since(btc_15m, 96);
+    let btc_ret_1h  = Indicators::return_since(btc_15m, 4);   // 4 × 15m = 1h
+    let btc_ret_4h  = Indicators::return_since(btc_15m, 16);  // 16 × 15m = 4h
+    let btc_ret_1d  = Indicators::return_since(btc_15m, 96);  // 96 × 15m = 24h
 
     let rs_15m = (coin_ret_15m - btc_ret_15m) * 100.0;
-    let rs_1h = (coin_ret_1h - btc_ret_1h) * 100.0;
-    let rs_4h = (coin_ret_4h - btc_ret_4h) * 100.0;
-    let rs_1d = (coin_ret_1d - btc_ret_1d) * 100.0;
-    let rs_score = rs_15m * 0.35 + rs_1h * 0.30 + rs_4h * 0.25 + rs_1d * 0.10;
+    let rs_1h  = (coin_ret_1h  - btc_ret_1h)  * 100.0;
+    let rs_4h  = (coin_ret_4h  - btc_ret_4h)  * 100.0;
+    let rs_1d  = (coin_ret_1d  - btc_ret_1d)  * 100.0;
+    // Weights aligned with RSEngine: 1h=35%, 4h=30%, 1d=25%, 15m=10%
+    let rs_score = rs_15m * 0.10 + rs_1h * 0.35 + rs_4h * 0.30 + rs_1d * 0.25;
 
     let volume_growth = Indicators::volume_growth(candles_15m, 20);
     let atr_expansion = if atr_14 > 0.0 {
@@ -552,22 +573,27 @@ fn compute_pair_metrics(
     let macd_bullish = macd_line > macd_signal && macd_histogram > 0.0;
     let volume_spike = volume_growth > 1.0;
     let volume_expansion = Indicators::is_volume_expansion(candles_15m, candles_1h, candles_4h);
-    let low_liquidity = candles_15m.iter().rev().take(10).map(|c| c.volume).sum::<f64>() < 10.0;
-    let wide_spread = false; // computed from orderbook in engine.rs, not here
+
+    // Low-liquidity flag: BTC-quote pairs have tiny quote volumes (fractions of BTC).
+    // Use count of zero-volume candles in last 10 instead of absolute threshold.
+    let zero_vol_count = candles_15m.iter().rev().take(10).filter(|c| c.volume == 0.0).count();
+    let low_liquidity = zero_vol_count >= 3;
+
+    let wide_spread = false; // computed from orderbook in exchange layer, not here
 
     PairMetrics {
         pair: pair.to_string(),
-        close_15m, close_1h, close_4h, close_1d: close_1h,
-        volume_15m, volume_1h, volume_4h, volume_1d: volume_1h,
+        close_15m, close_1h, close_4h, close_1d,
+        volume_15m, volume_1h, volume_4h, volume_1d,
         atr_14, atr_atr: atr_14,
         rsi_14, ema_20, ema_50, ema_200,
         macd_line, macd_signal, macd_histogram,
         vwap,
         bid_depth: 0.0, ask_depth: 0.0, spread_pct: 0.0,
         btc_return_15m: btc_ret_15m,
-        btc_return_1h: btc_ret_1h,
-        btc_return_4h: btc_ret_4h,
-        btc_return_1d: btc_ret_1d,
+        btc_return_1h:  btc_ret_1h,
+        btc_return_4h:  btc_ret_4h,
+        btc_return_1d:  btc_ret_1d,
         rs_15m, rs_1h, rs_4h, rs_1d, rs_score,
         volume_growth, atr_expansion,
         ema_bullish_alignment, macd_bullish,

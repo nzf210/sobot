@@ -82,24 +82,38 @@ impl MomentumEngine {
     }
 
     /// Score volatility quality (10% of total AI score)
-    /// Good volatility = enough movement to be tradable but not dangerous
+    /// Good volatility = enough movement to be tradable but not dangerous.
+    /// ATR is computed on 15m candles, so we normalize by close_15m for
+    /// consistency. BTC-quote pairs (SOLBTC ≈ 0.001 BTC) have much smaller
+    /// absolute prices, so the ATR% range that is "tradable" is the same
+    /// percentagewise — we keep the bands in percentage terms.
     pub fn score_volatility_component(metrics: &PairMetrics) -> f64 {
-        let atr_pct = if metrics.close_1h > 0.0 {
-            metrics.atr_14 / metrics.close_1h
+        // Use close_15m as the reference price (same timeframe as ATR)
+        let ref_price = if metrics.close_15m > 0.0 {
+            metrics.close_15m
+        } else if metrics.close_1h > 0.0 {
+            metrics.close_1h
         } else {
-            0.0
+            return 5.0; // neutral fallback
         };
 
-        // Ideal ATR%: 1-5% (enough movement to capture 3-8% TP)
-        // < 1% = too flat, > 10% = too dangerous
-        if atr_pct >= 0.01 && atr_pct <= 0.05 {
-            10.0
-        } else if atr_pct > 0.05 && atr_pct <= 0.10 {
-            7.0
-        } else if atr_pct < 0.01 {
-            3.0 // too quiet
+        let atr_pct = if ref_price > 0.0 { metrics.atr_14 / ref_price } else { 0.0 };
+
+        // Ideal ATR%: 0.5-4% (enough to capture 3-8% TP, not too dangerous)
+        // < 0.3% = too flat to be tradable after fees
+        // > 8% = dangerously volatile for 1% risk framework
+        if atr_pct >= 0.005 && atr_pct <= 0.04 {
+            10.0 // ideal range
+        } else if atr_pct > 0.04 && atr_pct <= 0.08 {
+            7.0  // high but manageable
+        } else if atr_pct > 0.003 && atr_pct < 0.005 {
+            8.0  // slightly below ideal but still tradable
+        } else if atr_pct < 0.003 && atr_pct > 0.001 {
+            4.0  // too quiet, hard to capture TP after fees
+        } else if atr_pct <= 0.001 {
+            2.0  // near-zero movement, skip
         } else {
-            4.0 // too volatile
+            3.0  // > 8% ATR — too volatile for 1% risk framework
         }
     }
 }

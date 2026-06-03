@@ -42,26 +42,33 @@ impl Indicators {
         ema.last().copied().unwrap_or(0.0)
     }
 
-    /// RSI(14)
-    pub fn rsi(candles:&[Ohlcv], period: usize) -> f64 {
-        if candles.len() < period + 1 {
+    /// RSI(n) — Wilder's smoothed RSI (industry standard).
+    ///
+    /// The initial seed uses SMA over the first `period` bars, then applies
+    /// Wilder's exponential smoothing (α = 1/period) for the remaining bars.
+    /// This matches TradingView/MetaTrader/most exchanges and is less reactive
+    /// to a single large candle than the naive SMA-only approach.
+    pub fn rsi(candles: &[Ohlcv], period: usize) -> f64 {
+        if candles.len() < period + 1 || period == 0 {
             return 50.0;
         }
-        let mut gains = 0.0;
-        let mut losses = 0.0;
+        // Seed: SMA of first `period` gain/loss values.
+        let mut avg_gain = 0.0;
+        let mut avg_loss = 0.0;
         for i in 1..=period {
             let delta = candles[i].close - candles[i - 1].close;
-            if delta > 0.0 {
-                gains += delta;
-            } else {
-                losses += delta.abs();
-            }
+            if delta > 0.0 { avg_gain += delta; } else { avg_loss += delta.abs(); }
         }
-        let avg_gain = gains / period as f64;
-        let avg_loss = losses / period as f64;
-        if avg_loss == 0.0 {
-            return 100.0;
+        avg_gain /= period as f64;
+        avg_loss /= period as f64;
+        // Wilder smooth: α = 1/period.
+        for i in (period + 1)..candles.len() {
+            let delta = candles[i].close - candles[i - 1].close;
+            let (g, l) = if delta >= 0.0 { (delta, 0.0) } else { (0.0, delta.abs()) };
+            avg_gain = (avg_gain * (period as f64 - 1.0) + g) / period as f64;
+            avg_loss = (avg_loss * (period as f64 - 1.0) + l) / period as f64;
         }
+        if avg_loss == 0.0 { return 100.0; }
         let rs = avg_gain / avg_loss;
         100.0 - (100.0 / (1.0 + rs))
     }
@@ -187,5 +194,71 @@ impl Indicators {
         } else {
             0.0
         }
+    }
+
+    /// Bollinger Bands — returns (middle, upper, lower).
+    /// Middle = SMA(period). Bands = middle ± (std_dev_multiplier × σ).
+    /// `period` = 20 and `multiplier` = 2.0 are the standard parameters.
+    pub fn bollinger_bands(candles: &[Ohlcv], period: usize, multiplier: f64) -> (f64, f64, f64) {
+        if candles.len() < period || period == 0 {
+            return (0.0, 0.0, 0.0);
+        }
+        let slice = &candles[candles.len() - period..];
+        let mean: f64 = slice.iter().map(|c| c.close).sum::<f64>() / period as f64;
+        let variance: f64 = slice.iter().map(|c| (c.close - mean).powi(2)).sum::<f64>() / period as f64;
+        let std_dev = variance.sqrt();
+        let upper = mean + multiplier * std_dev;
+        let lower = mean - multiplier * std_dev;
+        (mean, upper, lower)
+    }
+
+    /// %B (position within Bollinger Bands): 0 = at lower band, 1 = at upper band.
+    /// Values > 1 mean above upper band (overbought), < 0 below lower band (oversold).
+    pub fn percent_b(candles: &[Ohlcv], period: usize, multiplier: f64) -> f64 {
+        let (_middle, upper, lower) = Self::bollinger_bands(candles, period, multiplier);
+        let price = candles.last().map(|c| c.close).unwrap_or(0.0);
+        let band_width = upper - lower;
+        if band_width > 0.0 {
+            (price - lower) / band_width
+        } else {
+            0.5
+        }
+    }
+
+    /// Stochastic RSI (0-100): measures RSI position within its own min/max window.
+    /// Useful to confirm overbought/oversold when RSI alone is ambiguous.
+    /// Returns `k` value (raw stochastic applied to RSI series).
+    pub fn stoch_rsi(candles: &[Ohlcv], rsi_period: usize, stoch_period: usize) -> f64 {
+        if candles.len() < rsi_period + stoch_period {
+            return 50.0;
+        }
+        // Build a series of RSI values over the last stoch_period windows.
+        let mut rsi_series: Vec<f64> = Vec::with_capacity(stoch_period);
+        let offset = candles.len().saturating_sub(stoch_period + rsi_period);
+        for i in 0..stoch_period {
+            let slice = &candles[offset + i..offset + i + rsi_period + 1];
+            rsi_series.push(Self::rsi(slice, rsi_period));
+        }
+        if rsi_series.is_empty() { return 50.0; }
+        let current_rsi = *rsi_series.last().unwrap();
+        let min_rsi = rsi_series.iter().cloned().fold(f64::MAX, f64::min);
+        let max_rsi = rsi_series.iter().cloned().fold(f64::MIN, f64::max);
+        let range = max_rsi - min_rsi;
+        if range > 0.0 {
+            ((current_rsi - min_rsi) / range * 100.0).clamp(0.0, 100.0)
+        } else {
+            50.0
+        }
+    }
+
+    /// Trend consistency: fraction of last N candles that close higher than previous.
+    /// Values > 0.6 = consistent uptrend, < 0.4 = consistent downtrend.
+    pub fn trend_consistency(candles: &[Ohlcv], period: usize) -> f64 {
+        if candles.len() < period + 1 || period == 0 {
+            return 0.5;
+        }
+        let slice = &candles[candles.len() - period - 1..];
+        let bullish: usize = slice.windows(2).filter(|w| w[1].close > w[0].close).count();
+        bullish as f64 / period as f64
     }
 }

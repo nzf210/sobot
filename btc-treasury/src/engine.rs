@@ -154,16 +154,22 @@ impl AdvisoryEngine {
         let (risk_level, warnings) = assess_risk(&input.market_data, &input.treasury, input.loss_streak);
         let treasury_mode = treasury_mode(&input.market_data, &input.treasury, &risk_level);
 
-        // Blend AI score with orderbook-based opportunity score
-        let orderbook_score = opportunity_score(&input.market_data);
+        // Blend AI score with orderbook-based opportunity score.
+        // - orderbook_score: 0-100 scale (from opportunity_score())
+        // - ai_score: 0-10 scale from AIScoringEngine (score_pair() returns
+        //   (total * 10.0).round() / 10.0 where total is 0-10 → result 0-10).
+        //   Multiply by 10 to normalize to 0-100 before blending.
+        let orderbook_score = opportunity_score(&input.market_data); // 0-100
         let opportunity_score = match input.ai_score {
             Some(ai) if ai > 0.0 => {
+                let ai_100 = (ai * 10.0).clamp(0.0, 100.0); // normalize to 0-100
                 let ai_weight = 0.6;
                 let ob_weight = 0.4;
-                (ai * ai_weight + orderbook_score * ob_weight).round().clamp(0.0, 100.0)
+                (ai_100 * ai_weight + orderbook_score * ob_weight).round().clamp(0.0, 100.0)
             }
             _ => orderbook_score,
         };
+
 
         // ── QUANT FAST-PATH ──────────────────────────────────────────────
         // If the quant layer can already decide with high confidence, skip LLM
@@ -422,7 +428,9 @@ fn quant_fast_path(
         return Some(quant_advisory(data, &market_regime, "CRITICAL", &Vec::new(), opportunity, &mode, taker_fee));
     }
 
-    // Strong quant signal with low risk and high score: approve without LLM
+    // Strong quant signal with low risk and high score: approve without LLM.
+    // Use regime-based TP/SL from quant_advisory (which now does dynamic TP/SL)
+    // so the fast-path trade quality matches LLM-path quality.
     if risk_level == "LOW" && opportunity >= 80.0 && data.confidence >= 0.85 {
         let mode = treasury_mode(data, treasury, risk_level);
         return Some(quant_advisory(data, &market_regime, risk_level, &Vec::new(), opportunity, &mode, taker_fee));
@@ -431,45 +439,55 @@ fn quant_fast_path(
     None
 }
 
+
 fn classify_regime(data: &BtcMarketData) -> String {
+    // Guard: extreme danger conditions first
     if data.liquidity_score < 3.0 && data.volume_score < 3.0 {
         return "LOW_LIQUIDITY_DANGER".into();
     }
     if data.volatility_score > 9.0 {
         return "HIGH_VOLATILITY_DANGER".into();
     }
+    // Panic: strong negative trend + high vol
+    if data.trend_strength < -8.0 && data.volatility_score > 7.0 {
+        return "PANIC_SELLOFF".into();
+    }
+    // Trending states (strongest signals first)
     if data.trend_strength > 7.0 && data.volume_score > 6.0 && data.breakout_probability > 0.6 {
         return "TRENDING_BULLISH".into();
     }
     if data.trend_strength < -7.0 && data.volume_score > 6.0 {
         return "TRENDING_BEARISH".into();
     }
-    if data.confidence < 0.4 && data.volume_score < 4.0 {
-        return "CHOPPY".into();
-    }
-    if data.breakout_probability > 0.75 && data.trend_strength > 0.0 {
-        return "BREAKOUT_EXPANSION".into();
-    }
+    // Fake breakout: reversal likely at high trend
     if data.reversal_probability > 0.75 && data.trend_strength > 5.0 {
         return "FAKE_BREAKOUT".into();
     }
-    if data.trend_strength.abs() < 3.0 && data.volume_score > 3.0 {
-        return "RANGING".into();
+    // Breakout expansion
+    if data.breakout_probability > 0.75 && data.trend_strength > 0.0 {
+        return "BREAKOUT_EXPANSION".into();
     }
-    if data.trend_strength > 3.0 && data.volume_score < 5.0 && data.breakout_probability < 0.35 {
-        return "ACCUMULATION".into();
-    }
+    // Distribution: bearish trend + volume
     if data.trend_strength < -3.0 && data.volume_score > 5.0 {
         return "DISTRIBUTION".into();
     }
-    if data.trend_strength < -8.0 && data.volatility_score > 7.0 {
-        return "PANIC_SELLOFF".into();
+    // Accumulation: bullish trend, lower volume (stealth accumulation)
+    if data.trend_strength > 3.0 && data.volume_score < 5.0 && data.breakout_probability < 0.35 {
+        return "ACCUMULATION".into();
     }
-    if data.trend_strength.abs() < 2.0 && data.confidence < 0.35 {
+    // Choppy: low confidence + low volume
+    if (data.confidence < 0.4 && data.volume_score < 4.0)
+        || (data.trend_strength.abs() < 2.0 && data.confidence < 0.35)
+    {
         return "CHOPPY".into();
+    }
+    // Ranging: sideways price action
+    if data.trend_strength.abs() < 3.0 && data.volume_score > 3.0 {
+        return "RANGING".into();
     }
     "RANGING".into()
 }
+
 
 fn assess_risk(data: &BtcMarketData, treasury: &BtcTreasuryState, loss_streak: i32) -> (String, Vec<String>) {
     let mut risk_score: f64 = 0.0;
@@ -557,6 +575,12 @@ fn treasury_mode(data: &BtcMarketData, treasury: &BtcTreasuryState, risk_level: 
 fn opportunity_score(data: &BtcMarketData) -> f64 {
     let trend_norm = ((data.trend_strength + 10.0) / 20.0).clamp(0.0, 1.0);
 
+    // Each component is on a 0-10 scale; weights sum to 1.0 → total range 0-10.
+    // Multiply by 10 to produce a 0-100 scale consistent with:
+    //   - quant_fast_path threshold: opportunity >= 80.0
+    //   - quant_advisory thresholds: >= 75.0, >= 60.0, < 50.0
+    //   - config.min_score_threshold: default 80.0
+    //   - should_activate_llm ambiguous zone: [55, 80)
     let score = data.liquidity_score * 0.20
         + data.spread_score * 0.10
         + (10.0 - data.volatility_score) * 0.15
@@ -565,17 +589,30 @@ fn opportunity_score(data: &BtcMarketData) -> f64 {
         + data.breakout_probability * 10.0 * 0.15
         + (1.0 - data.reversal_probability) * 10.0 * 0.05;
 
-    (score * 100.0).round() / 100.0
+    // Scale to 0-100 and round to 1 decimal place.
+    (score * 10.0 * 10.0).round() / 10.0
 }
 
 /// Activation gate. Runs AFTER the quant fast-path, so it only sees the
-/// truly ambiguous cases. We tightened the threshold from 0.75 to 0.85 and
-/// removed redundant checks (loss_streak + low confidence now caught by
-/// fast-path).
+/// truly ambiguous cases. LLM is reserved for:
+/// - Ambiguous opportunity zone (60-80): quant could go either way
+/// - Conflicting signals (confidence low but score decent)
+/// - Distress conditions (drawdown, volatility spike, liquidity drop)
+/// Returns true → call LLM. Returns false → use quant fallback.
 fn should_activate_llm(data: &BtcMarketData, _treasury: &BtcTreasuryState, _loss_streak: i32, cfg: &BtcConfig) -> bool {
+    // Genuinely ambiguous opportunity zone: LLM provides value here
+    // (fast-path already handled score >= 80 with low risk)
+    // score in [55, 80) is the "borderline" region worth LLM reasoning.
+    let opportunity = opportunity_score(data); // 0-100 scale
+    // LLM for ambiguous zone
+    if opportunity >= 55.0 && opportunity < 80.0 {
+        return true;
+    }
+    // LLM for low-confidence signals (even if score is ok)
     if data.confidence < cfg.llm_activation_threshold {
         return true;
     }
+    // LLM for distress conditions
     if data.daily_drawdown > 0.03 {
         return true;
     }
@@ -584,6 +621,7 @@ fn should_activate_llm(data: &BtcMarketData, _treasury: &BtcTreasuryState, _loss
     }
     false
 }
+
 
 fn quant_advisory(
     data: &BtcMarketData,
@@ -594,10 +632,62 @@ fn quant_advisory(
     treasury_mode: &str,
     taker_fee_pct: f64,
 ) -> FullBtcAdvisory {
-    let round_trip_fee_pct = taker_fee_pct * 200.0; // 0.2%
-    // Quant fallback SL: base 0.8% + round-trip fee, capped at 2.0%
-    let base_sl = 0.8;
-    let quant_sl = -((base_sl + round_trip_fee_pct).clamp(0.8, 2.0));
+    let round_trip_fee_pct = taker_fee_pct * 200.0; // e.g. 0.001 × 200 = 0.2%
+
+    // ── Regime-aware dynamic TP/SL ─────────────────────────────────────────
+    // Match what the system prompt tells the LLM to do (CALM/TRENDING/VOLATILE
+    // bands) so the quant-path and LLM-path produce comparable trade quality.
+    //
+    // Fee awareness: effective loss = |SL%| + round_trip_fee.
+    // We ensure |SL%| >= 0.8% after fee so the position survives random noise.
+    let (tp, sl, tp_reason, sl_reason) = match regime {
+        // Danger: these should never reach quant_advisory with APPROVE, but guard anyway
+        "HIGH_VOLATILITY_DANGER" | "PANIC_SELLOFF" | "LOW_LIQUIDITY_DANGER" => {
+            let sl = -(2.5_f64.max(round_trip_fee_pct + 2.0));
+            (7.5, sl,
+             "Danger regime — wide TP needed if position must be held".into(),
+             format!("Danger regime — {:.1}% SL + {:.1}% fee", sl.abs(), round_trip_fee_pct))
+        }
+        // Trending: ride the momentum, wider targets
+        "TRENDING_BULLISH" | "BREAKOUT_EXPANSION" => {
+            let base_sl = 1.5_f64.max(round_trip_fee_pct + 0.8);
+            let sl = -base_sl.min(2.0);
+            let tp = if data.confidence >= 0.85 { 7.0 } else { 5.5 };
+            (tp, sl,
+             format!("TRENDING regime — {:.1}% TP captures momentum above resistance", tp),
+             format!("TRENDING SL {:.1}% + {:.1}% fee = {:.1}% max loss",
+                     base_sl, round_trip_fee_pct, base_sl + round_trip_fee_pct))
+        }
+        // Ranging/Accumulation: smaller move, tighter targets
+        "RANGING" | "ACCUMULATION" => {
+            let base_sl = 1.0_f64.max(round_trip_fee_pct + 0.8);
+            let sl = -(base_sl.min(1.5));
+            let tp = if opportunity >= 75.0 { 4.0 } else { 3.0 };
+            (tp, sl,
+             format!("RANGING/ACCUMULATION — {:.1}% TP for sideways breakout", tp),
+             format!("CALM SL {:.1}% + {:.1}% fee = {:.1}% max loss",
+                     base_sl, round_trip_fee_pct, base_sl + round_trip_fee_pct))
+        }
+        // High volatility zone: wide targets, wider SL room
+        _ if data.volatility_score >= 7.0 => {
+            let base_sl = 2.0_f64.max(round_trip_fee_pct + 1.5);
+            let sl = -(base_sl.min(2.5));
+            let tp = if data.confidence >= 0.80 { 8.0 } else { 6.0 };
+            (tp, sl,
+             format!("VOLATILE — {:.1}% TP for high-ATR environment", tp),
+             format!("VOLATILE SL {:.1}% + {:.1}% fee = {:.1}% max loss",
+                     base_sl, round_trip_fee_pct, base_sl + round_trip_fee_pct))
+        }
+        // Default (DISTRIBUTION, FAKE_BREAKOUT, CHOPPY, etc.) — conservative
+        _ => {
+            let base_sl = 0.8_f64.max(round_trip_fee_pct + 0.6);
+            let sl = -(base_sl.clamp(0.8, 2.0));
+            (5.5, sl,
+             format!("Quant fallback: 5.5% TP (regime: {})", regime),
+             format!("Quant fallback: {:.1}% SL + {:.1}% fee = {:.1}% max loss",
+                     base_sl, round_trip_fee_pct, base_sl + round_trip_fee_pct))
+        }
+    };
 
     let (recommendation, reason) = match risk_level {
         "CRITICAL" => (
@@ -645,9 +735,9 @@ fn quant_advisory(
         opportunity_score: opportunity,
         bypass_quant: false,
         timestamp: chrono::Utc::now().to_rfc3339(),
-        dynamic_take_profit: 5.5,    // quant fallback: conservative default
-        dynamic_stop_loss: quant_sl, // fee-aware: base SL + round-trip fee
-        tp_reason: format!("Quant fallback: default 5.5% TP ({:.1}% fee-adjusted SL)", -quant_sl),
-        sl_reason: format!("Quant fallback: {:.1}% SL + {:.1}% fee = {:.1}% max loss", base_sl, round_trip_fee_pct, base_sl + round_trip_fee_pct),
+        dynamic_take_profit: tp,
+        dynamic_stop_loss: sl,
+        tp_reason,
+        sl_reason,
     }
 }

@@ -31,8 +31,7 @@ impl RiskManager {
         let can_open_new = !pause_trading
             && active_positions < cfg.max_positions
             && drawdown_pct <= 0.10
-            && treasury.trading_paused_until.is_empty()
-            || Self::is_pause_expired(treasury);
+            && Self::is_pause_expired(treasury);
 
         RiskAssessment {
             risk_per_trade_pct: cfg.risk_per_trade_pct * 100.0,
@@ -133,5 +132,45 @@ impl RiskManager {
     pub fn clamp_sl(original_sl: f64, close_price: f64, atr_14: f64) -> f64 {
         let min_sl = Self::min_sl_from_atr(close_price, atr_14);
         original_sl.min(min_sl).max(-5.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_can_open_new_respects_constraints() {
+        let mut treasury = BtcTreasuryState::default();
+        let cfg = BtcConfig {
+            max_positions: 3,
+            max_consecutive_losses: 3,
+            risk_per_trade_pct: 0.01,
+            stop_loss_pct: -0.02,
+            max_exposure: 0.5,
+            ..Default::default()
+        };
+
+        // Standard condition: should be able to open new position
+        let res = RiskManager::assess(&treasury, 1, 0, 0.01, 10000.0, &cfg);
+        assert!(res.can_open_new);
+        assert_eq!(res.risk_level, "LOW");
+
+        // Max positions reached: should NOT be able to open new position
+        let res = RiskManager::assess(&treasury, 3, 0, 0.01, 10000.0, &cfg);
+        assert!(!res.can_open_new);
+
+        // High drawdown (>10%): should NOT be able to open new position
+        let res = RiskManager::assess(&treasury, 1, 0, 0.12, 10000.0, &cfg);
+        assert!(!res.can_open_new);
+
+        // Paused trading (consecutive losses >= max_consecutive_losses): should NOT be able to open new position
+        let res = RiskManager::assess(&treasury, 1, 3, 0.01, 10000.0, &cfg);
+        assert!(!res.can_open_new);
+
+        // Even if trading_paused_until has expired/is empty, max positions constraint must still block opening new positions
+        treasury.trading_paused_until = "".to_string();
+        let res = RiskManager::assess(&treasury, 3, 0, 0.01, 10000.0, &cfg);
+        assert!(!res.can_open_new);
     }
 }

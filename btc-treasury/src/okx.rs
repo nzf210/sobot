@@ -455,7 +455,7 @@ impl OkxClient {
         };
         let volume_score = ((bid_depth + ask_depth) / 100.0).min(10.0);
         let liquidity_score = (bid_depth.min(ask_depth) / 50.0).min(10.0);
-        let spread_score = (10.0 - (spread * 100.0).min(10.0)).max(0.0);
+        let spread_score = (10.0 - (spread * 20.0).min(10.0)).max(0.0);
         let total_vol = bid_depth + ask_depth;
         let trend_strength = if total_vol > 0.0 {
             (bid_depth - ask_depth) / total_vol * 10.0

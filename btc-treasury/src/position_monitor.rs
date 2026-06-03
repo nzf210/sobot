@@ -60,6 +60,11 @@ impl PositionMonitor {
 
         let cfg = self.mem.get_config();
         let mut modified = false;
+        // Indices of positions that need to be closed this cycle.
+        // Collected during iteration, then removed in reverse order to
+        // avoid index-shift bugs. Previously a `break` after each close
+        // meant at most one position could exit per 30s tick.
+        let mut positions_to_remove: Vec<usize> = Vec::new();
 
         for i in 0..positions.len() {
             // Fetch current price
@@ -198,17 +203,19 @@ impl PositionMonitor {
                         }
                         Err(e) => {
                             tracing::error!("Failed to execute market sell for {}: {}", pair_id, e);
+                            // Mark as NOT needing removal — close failed, keep monitoring.
+                            modified = false;
                             continue;
                         }
                     }
                 }
 
                 // Log the close
-                let quality = if pnl_pct > 10.0 {
+                let quality = if pnl_pct > 5.0 {
                     "excellent"
                 } else if pnl_pct > 0.0 {
                     "good"
-                } else if pnl_pct > -5.0 {
+                } else if pnl_pct > -2.0 {
                     "neutral"
                 } else {
                     "bad"
@@ -223,7 +230,7 @@ impl PositionMonitor {
                     .unwrap_or_default();
 
                 let lesson = format!(
-                    "[BTC][{}] {}: PnL {:.2}% (peak {:.2}%). Entry: {:.2}, Exit: {:.2}. Quality: {}. Close: {}. TP: {:.1}%, SL: {:.1}%",
+                    "[BTC][{}] {}: PnL {:.2}% (peak {:.2}%). Entry: {:.6}, Exit: {:.6}. Quality: {}. Close: {}. TP: {:.1}%, SL: {:.1}%",
                     ts,
                     pair_id,
                     pnl_pct,
@@ -237,12 +244,17 @@ impl PositionMonitor {
                 );
                 self.mem.add_lesson(lesson);
 
-                // Auto-pause on consecutive losses
+                // Update consecutive_losses + auto-pause.
+                // NOTE: update_treasury_on_close() already incremented
+                // winning_trades / losing_trades / total_trades in memory.
+                // We only update the streak counter + pause here to avoid
+                // double-counting those counters.
                 {
                     let mut treasury = self.mem.get_treasury_state();
                     if pnl_pct <= 0.0 {
+                        // consecutive_losses not incremented by update_treasury_on_close,
+                        // so we do it here exclusively.
                         treasury.consecutive_losses += 1;
-                        treasury.losing_trades += 1;
                         let cfg = self.mem.get_config();
                         if treasury.consecutive_losses >= cfg.max_consecutive_losses {
                             let pause_until = chrono::Utc::now() + chrono::Duration::hours(24);
@@ -253,16 +265,23 @@ impl PositionMonitor {
                             );
                         }
                     } else {
-                        treasury.winning_trades += 1;
                         treasury.consecutive_losses = 0; // reset loss streak on win
                     }
                     self.mem.save_treasury_state(treasury);
                 }
 
-                // Remove from positions
-                positions.remove(i);
-                break;
+                // Mark this position index for removal.
+                // We collect indices instead of removing immediately so we
+                // can process ALL positions in one cycle (previously a
+                // `break` after `positions.remove(i)` exited the loop,
+                // meaning at most one position could close per 30s tick).
+                positions_to_remove.push(i);
             }
+        }
+
+        // Remove closed positions in reverse order to preserve indices.
+        for idx in positions_to_remove.into_iter().rev() {
+            positions.remove(idx);
         }
 
         if modified {
