@@ -7,6 +7,15 @@ use crate::format::{escape_mdv2, send_mdv2_safe};
 use crate::scanner::{ScannerState, RecentDecision};
 use crate::memory::MemoryStore;
 
+/// When there are more pairs than this threshold, the report switches from
+/// per-pair lines to a compact summary-only mode to stay within Telegram's
+/// 4096-char message limit. `send_mdv2_safe` will chunk even if this limit
+/// is reached, but keeping individual messages meaningful is better UX.
+const PAIR_DETAIL_THRESHOLD: usize = 20;
+
+/// Maximum chars for a `reason` field in Recent Decisions before we truncate.
+const MAX_REASON_CHARS: usize = 120;
+
 /// Per-account, per-exchange report target. One reporter loop iterates
 /// `Vec<PerAccountReport>` and emits a per-binding block. With one `default`
 /// account on a single exchange the output is byte-identical to the
@@ -217,23 +226,62 @@ fn format_report(
     }
 
     if !snapshots.is_empty() {
-        lines.push(format!("Pairs: {} \\| Scans: {} \\| Errors: {}\n", snapshots.len(), total_scanned, total_errors));
-        for s in snapshots {
-            let icon = match s.last_recommendation.as_str() {
-                "APPROVE" => "✅",
-                "MONITOR" => "👁",
-                "PROTECT_TREASURY" | "ENABLE_SAFE_MODE" | "REDUCE_EXPOSURE" => "🛡",
-                _ if s.last_recommendation.is_empty() => "⏳",
-                _ => "❌",
-            };
-            lines.push(format!(
-                "{} {} {} scans \\| {} \\(conf: {:.2}\\)",
-                icon,
-                escape_mdv2(&s.pair),
-                s.stats.scanned,
-                escape_mdv2(&s.last_recommendation),
-                s.last_confidence,
-            ));
+        // Count per-recommendation bucket for compact summary
+        let approve_cnt = snapshots.iter().filter(|s| s.last_recommendation == "APPROVE").count();
+        let monitor_cnt = snapshots.iter().filter(|s| s.last_recommendation == "MONITOR").count();
+        let protect_cnt = snapshots.iter().filter(|s| {
+            matches!(s.last_recommendation.as_str(), "PROTECT_TREASURY" | "ENABLE_SAFE_MODE" | "REDUCE_EXPOSURE")
+        }).count();
+        let reject_cnt = snapshots.iter().filter(|s| {
+            !s.last_recommendation.is_empty()
+                && !matches!(s.last_recommendation.as_str(),
+                    "APPROVE" | "MONITOR" | "PROTECT_TREASURY" | "ENABLE_SAFE_MODE" | "REDUCE_EXPOSURE")
+        }).count();
+
+        lines.push(format!(
+            "Pairs: {} \\| Scans: {} \\| Errors: {}\n✅ {} \\| 👁 {} \\| 🛡 {} \\| ❌ {}\n",
+            snapshots.len(), total_scanned, total_errors,
+            approve_cnt, monitor_cnt, protect_cnt, reject_cnt
+        ));
+
+        if snapshots.len() <= PAIR_DETAIL_THRESHOLD {
+            // ── Detailed mode: one line per pair ────────────────────────
+            for s in snapshots {
+                let icon = match s.last_recommendation.as_str() {
+                    "APPROVE" => "✅",
+                    "MONITOR" => "👁",
+                    "PROTECT_TREASURY" | "ENABLE_SAFE_MODE" | "REDUCE_EXPOSURE" => "🛡",
+                    _ if s.last_recommendation.is_empty() => "⏳",
+                    _ => "❌",
+                };
+                lines.push(format!(
+                    "{} {} {} scans \\| {} \\(conf: {:.2}\\)",
+                    icon,
+                    escape_mdv2(&s.pair),
+                    s.stats.scanned,
+                    escape_mdv2(&s.last_recommendation),
+                    s.last_confidence,
+                ));
+            }
+        } else {
+            // ── Compact mode: only show top APPROVE and notable pairs ───
+            // Show up to 5 APPROVE pairs (highest confidence first)
+            let mut approve_pairs: Vec<&crate::scanner::PairSnapshot> = snapshots
+                .iter()
+                .filter(|s| s.last_recommendation == "APPROVE")
+                .collect();
+            approve_pairs.sort_by(|a, b| b.last_confidence.partial_cmp(&a.last_confidence).unwrap_or(std::cmp::Ordering::Equal));
+
+            if !approve_pairs.is_empty() {
+                lines.push("*Top APPROVE pairs:*".into());
+                for s in approve_pairs.iter().take(5) {
+                    lines.push(format!(
+                        "✅ {} conf:{:.2}",
+                        escape_mdv2(&s.pair),
+                        s.last_confidence,
+                    ));
+                }
+            }
         }
     }
 
@@ -251,6 +299,12 @@ fn format_report(
             } else {
                 &d.timestamp
             };
+            // Truncate reason to avoid huge messages
+            let reason_short = if d.reason.len() > MAX_REASON_CHARS {
+                format!("{}…", &d.reason[..MAX_REASON_CHARS])
+            } else {
+                d.reason.clone()
+            };
             lines.push(format!(
                 "{}\\. {} {} {} \\- {} \\(conf: {:.2}, risk: {}\\)\n  \\_`{}`",
                 i + 1,
@@ -260,7 +314,7 @@ fn format_report(
                 escape_mdv2(&d.recommendation),
                 d.confidence,
                 escape_mdv2(&d.risk_level),
-                escape_mdv2(&d.reason),
+                escape_mdv2(&reason_short),
             ));
         }
     }

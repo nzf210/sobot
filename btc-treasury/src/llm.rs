@@ -44,6 +44,58 @@ struct AdvisoryJson {
     sl_reason: String,
 }
 
+/// Strip markdown code-fence wrappers that some LLMs add around JSON.
+/// For example:
+///   ```json\n{...}\n```
+///   ```\n{...}\n```
+/// are both reduced to just `{...}`.
+fn strip_code_fence(s: &str) -> &str {
+    let trimmed = s.trim();
+    // Check for opening fence like ```json or ```
+    if let Some(rest) = trimmed.strip_prefix("```") {
+        // Skip the optional language tag and the first newline
+        let after_tag = if let Some(nl) = rest.find('\n') {
+            &rest[nl + 1..]
+        } else {
+            rest
+        };
+        // Remove trailing closing fence
+        let cleaned = after_tag.trim_end();
+        if let Some(without_fence) = cleaned.strip_suffix("```") {
+            return without_fence.trim();
+        }
+        return after_tag.trim();
+    }
+    trimmed
+}
+
+/// Extract the first JSON object `{...}` from `s`. Some LLM endpoints return
+/// extra text before or after the JSON payload even when instructed not to.
+fn extract_json_object(s: &str) -> Option<&str> {
+    let start = s.find('{')?;
+    // Find the matching closing brace (naive — works for flat/single-level JSON)
+    let mut depth: i32 = 0;
+    let mut end = start;
+    for (i, ch) in s[start..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = start + i;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    if depth == 0 && end >= start {
+        Some(&s[start..=end])
+    } else {
+        None
+    }
+}
+
 impl LlmClient {
     pub fn new(url: String, model: String, api_key: String) -> Self {
         Self { url, model, api_key }
@@ -60,7 +112,7 @@ impl LlmClient {
         });
 
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(20))
+            .timeout(std::time::Duration::from_secs(30))
             .build()?;
 
         let url = format!("{}/chat/completions", self.url);
@@ -78,7 +130,21 @@ impl LlmClient {
             anyhow::bail!("LLM API returned {}: {}", status, body);
         }
 
-        let llm: LlmResponse = resp.json().await?;
+        // Read the raw body first so we can log it on parse failure.
+        let raw_body = resp.text().await?;
+        if raw_body.trim().is_empty() {
+            anyhow::bail!("LLM API returned an empty response body");
+        }
+
+        // Parse the outer OpenAI-compatible envelope.
+        let llm: LlmResponse = serde_json::from_str(&raw_body).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse LLM envelope JSON: {} — raw (first 500 chars): {}",
+                e,
+                &raw_body[..raw_body.len().min(500)]
+            )
+        })?;
+
         let content = llm
             .choices
             .first()
@@ -87,7 +153,25 @@ impl LlmClient {
             .content
             .clone();
 
-        let result: AdvisoryJson = serde_json::from_str(&content)?;
+        if content.trim().is_empty() {
+            anyhow::bail!("LLM returned an empty content field");
+        }
+
+        // Robustly extract JSON from the content field:
+        //   1. Strip any ```json ... ``` code fences.
+        //   2. Extract the first JSON object if there is preamble text.
+        let stripped = strip_code_fence(&content);
+        let json_str = extract_json_object(stripped)
+            .or_else(|| extract_json_object(&content))
+            .unwrap_or(stripped);
+
+        let result: AdvisoryJson = serde_json::from_str(json_str).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to parse AdvisoryJson: {} — content (first 500 chars): {}",
+                e,
+                &content[..content.len().min(500)]
+            )
+        })?;
 
         Ok(FullBtcAdvisory {
             recommendation: result.recommendation,
