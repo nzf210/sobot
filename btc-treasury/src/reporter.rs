@@ -2,18 +2,20 @@ use std::sync::Arc;
 
 use tokio::time::{interval, Duration};
 
+use crate::account_spec::ExchangeKind;
 use crate::format::{escape_mdv2, send_mdv2_safe};
 use crate::scanner::{ScannerState, RecentDecision};
 use crate::memory::MemoryStore;
 
-/// Per-account report target. One reporter loop iterates `Vec<PerAccountReport>`
-/// and emits a per-account block. With one `default` account the output is
-/// byte-identical to the pre-Fase-1.5 reporter (no per-account prefix added
-/// when there's only one account — keeps the single-account user experience
-/// unchanged).
+/// Per-account, per-exchange report target. One reporter loop iterates
+/// `Vec<PerAccountReport>` and emits a per-binding block. With one `default`
+/// account on a single exchange the output is byte-identical to the
+/// pre-Fase-1.5 reporter. With N accounts × M exchanges each binding gets
+/// its own block prefixed `[id/exchange]`.
 #[derive(Clone)]
 pub struct PerAccountReport {
     pub account_id: String,
+    pub exchange: ExchangeKind,
     pub state: Arc<ScannerState>,
     pub mem: Arc<MemoryStore>,
     /// Per-account chat IDs (from `AccountSpec.telegram_chat_ids`). If empty,
@@ -48,17 +50,30 @@ pub async fn run(
         return;
     }
 
-    let multi = effective.len() > 1;
+    // Decide the title mode for each binding up front. Three modes:
+    //   - `Legacy`: only one binding overall → "*BTC Scan Report — {exchange} Spot*"
+    //     (preserves pre-Fase-1.5 byte-for-byte output)
+    //   - `MultiAccount { id }`: multiple distinct ids, each single exchange
+    //     → "*BTC Scan Report — [{id}]*"
+    //   - `MultiExchange { id, exchange }`: same id has multiple exchanges
+    //     → "*BTC Scan Report — [{id}/{exchange}]*"
+    let total = effective.len();
+    let distinct_ids: std::collections::HashSet<String> =
+        effective.iter().map(|(a, _)| a.account_id.clone()).collect();
+    let bindings_per_id = count_bindings_per_id(&effective);
+    let multi = total > 1;
+
     tracing::info!(
-        "BTC reporter started (every {} min) for {} account(s)",
-        interval_mins,
-        effective.len()
+        "BTC reporter started (every {} min) for {} binding(s) across {} account(s)",
+        interval_mins, total, distinct_ids.len()
     );
 
     let mut tick = interval(Duration::from_secs(interval_mins * 60));
-    let mut last_lesson_count: std::collections::HashMap<String, usize> = effective
+    // Lesson counters keyed by (account_id, exchange) so two bindings under
+    // the same id don't share the same delta-detection window.
+    let mut last_lesson_count: std::collections::HashMap<(String, ExchangeKind), usize> = effective
         .iter()
-        .map(|(a, _)| (a.account_id.clone(), a.mem.get_lessons().len()))
+        .map(|(a, _)| ((a.account_id.clone(), a.exchange), a.mem.get_lessons().len()))
         .collect();
 
     loop {
@@ -66,7 +81,10 @@ pub async fn run(
 
         let bot = teloxide::prelude::Bot::new(&bot_token);
         for (acct, chat_ids) in &effective {
-            let prev = last_lesson_count.get(&acct.account_id).copied().unwrap_or(0);
+            let prev = last_lesson_count
+                .get(&(acct.account_id.clone(), acct.exchange))
+                .copied()
+                .unwrap_or(0);
 
             // Async fetches (reporter is itself async).
             let snapshots = acct.state.all_snapshots().await;
@@ -86,13 +104,22 @@ pub async fn run(
                 continue;
             }
 
-            let msg = format_report(&acct.account_id, &snapshots, &recent, &new_lessons, multi);
+            // Per-binding title mode.
+            let title = if total == 1 {
+                ReportTitle::Legacy(acct.exchange.as_str())
+            } else if bindings_per_id.get(&acct.account_id).copied().unwrap_or(1) > 1 {
+                ReportTitle::MultiExchange(&acct.account_id, acct.exchange.as_str())
+            } else {
+                ReportTitle::MultiAccount(&acct.account_id)
+            };
+
+            let msg = format_report(title, &snapshots, &recent, &new_lessons);
             for chat_id in chat_ids {
                 let chat = teloxide::prelude::ChatId(*chat_id);
                 if let Err(e) = send_mdv2_safe(&bot, chat, &msg).await {
                     tracing::error!(
-                        "Reporter [{}]: failed to send to {}: {}",
-                        acct.account_id, chat_id, e
+                        "Reporter [{}/{}]: failed to send to {}: {}",
+                        acct.account_id, acct.exchange.as_str(), chat_id, e
                     );
                 }
             }
@@ -100,11 +127,14 @@ pub async fn run(
         // Update lesson counters AFTER the per-account send so the next tick
         // detects only genuinely new lessons.
         for (acct, _) in &effective {
-            last_lesson_count.insert(acct.account_id.clone(), acct.mem.get_lessons().len());
+            last_lesson_count.insert(
+                (acct.account_id.clone(), acct.exchange),
+                acct.mem.get_lessons().len(),
+            );
         }
 
-        // Multi-account aggregate footer (sent once per loop to the first
-        // account's chat list to avoid spamming every chat with the same
+        // Multi-binding aggregate footer (sent once per loop to the first
+        // binding's chat list to avoid spamming every chat with the same
         // digest).
         if multi {
             if let Some((_, first_chats)) = effective.first() {
@@ -121,7 +151,7 @@ pub async fn run(
                     .map(|(a, _)| a.mem.get_treasury_state().total_trades as u64)
                     .sum();
                 let aggregate = format!(
-                    "\n──────────\n*Aggregate — All Accounts*\nBTC: {:.8} \\| Vault: {:.8} \\| Trades: {}",
+                    "\n──────────\n*Aggregate — All Bindings*\nBTC: {:.8} \\| Vault: {:.8} \\| Trades: {}",
                     total_btc, total_vault, total_trades
                 );
                 for chat_id in first_chats {
@@ -135,22 +165,47 @@ pub async fn run(
     }
 }
 
+/// How a report block should title itself. `Legacy` is the pre-Fase-1.5
+/// single-binding title (no `[id]` prefix). `MultiAccount` and
+/// `MultiExchange` add prefixes so multi-binding users can tell blocks apart.
+#[derive(Debug, Clone, Copy)]
+enum ReportTitle<'a> {
+    Legacy(&'a str),                    // "*BTC Scan Report — {exchange} Spot*"
+    MultiAccount(&'a str),              // "*BTC Scan Report — [{id}]*"
+    MultiExchange(&'a str, &'a str),    // "*BTC Scan Report — [{id}/{exchange}]*"
+}
+
+fn count_bindings_per_id(
+    effective: &[(PerAccountReport, Vec<i64>)],
+) -> std::collections::HashMap<String, usize> {
+    let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (a, _) in effective {
+        *map.entry(a.account_id.clone()).or_insert(0) += 1;
+    }
+    map
+}
+
 fn format_report(
-    account_id: &str,
+    title: ReportTitle<'_>,
     snapshots: &[crate::scanner::PairSnapshot],
     recent: &[RecentDecision],
     new_lessons: &[String],
-    multi: bool,
 ) -> String {
     let mut lines: Vec<String> = Vec::new();
 
-    // Single-account legacy behavior: title is just "*BTC Scan Report — Binance Spot*".
-    // Multi-account: prefix with account id so users can tell which account a
-    // block came from.
-    if multi {
-        lines.push(format!("*BTC Scan Report — [{}]*\n", account_id));
-    } else {
-        lines.push("*BTC Scan Report — Binance Spot*\n".into());
+    // Single-binding legacy: "*BTC Scan Report — {exchange} Spot*" (e.g.
+    // "Binance Spot"). This is byte-identical to pre-Fase-1.5 for the
+    // single-account user.
+    match title {
+        ReportTitle::Legacy(exchange) => {
+            lines.push(format!("*BTC Scan Report — {} Spot*\n", exchange));
+        }
+        ReportTitle::MultiAccount(id) => {
+            lines.push(format!("*BTC Scan Report — [{}]*\n", id));
+        }
+        ReportTitle::MultiExchange(id, exchange) => {
+            lines.push(format!("*BTC Scan Report — [{}/{}]*\n", id, exchange));
+        }
     }
 
     let total_scanned: u64 = snapshots.iter().map(|s| s.stats.scanned).sum();

@@ -1,5 +1,24 @@
 use crate::sanitize;
 
+/// Runtime configuration loaded from `.env` (Fase 3).
+///
+/// What's in `.env`:
+/// - **Telegram whitelist** (per user request: only the whitelist stays here)
+/// - Telegram bot token + report chat IDs
+/// - LLM keys (still env-managed; out of scope to move to JSON this PR)
+/// - Data directory path (`DATA_BTC_DIR` / `DATA_DIR`)
+/// - `EXCHANGE_NAME` — legacy single-exchange selector (also accepts `both`
+///   / `binance,okx` for the Fase 3 "1 account, 2 exchanges" mode)
+/// - Wallet password (Solana-side, Fase 2 legacy)
+/// - Scanner/report intervals
+///
+/// What's NOT here anymore (moved to per-account JSON):
+/// - `exchange_api_key` / `exchange_api_secret` / `exchange_base_url` —
+///   each account spec in `accounts.json` (or `btc-accounts.json`) carries
+///   its own credentials and base URL. Legacy env-var fallbacks
+///   (`BINANCE_API_KEY` / `OKX_API_KEY` / etc.) are still read by
+///   `account_spec::legacy_default_spec` for users who haven't adopted the
+///   JSON file yet.
 pub struct AppConfig {
     pub backend_port: u16,
     pub llm_url: String,
@@ -9,10 +28,11 @@ pub struct AppConfig {
     pub telegram_bot_token: String,
     pub telegram_whitelist: Vec<i64>,
     pub telegram_report_chat_ids: Vec<i64>,
+    /// Legacy single-exchange selector: `binance` | `okx` | `both` |
+    /// `binance,okx`. Used by `account_spec::legacy_default_specs` to fan
+    /// out into 1+ specs. With a per-account JSON file present, this is
+    /// ignored (the JSON file is authoritative).
     pub exchange_name: String,
-    pub exchange_api_key: String,
-    pub exchange_api_secret: String,
-    pub exchange_base_url: String,
     pub wallet_password: String,
     pub scanner_interval_secs: u64,
     pub report_interval_mins: u64,
@@ -81,13 +101,6 @@ impl AppConfig {
             telegram_whitelist: env_whitelist("TELEGRAM_WHITELIST_USER_BTC_IDS"),
             telegram_report_chat_ids: env_whitelist("TELEGRAM_REPORT_CHAT_IDS"),
             exchange_name: env_str("EXCHANGE_NAME", "binance"),
-            exchange_api_key: std::env::var("BINANCE_API_KEY")
-                .or_else(|_| std::env::var("EXCHANGE_API_KEY"))
-                .unwrap_or_default(),
-            exchange_api_secret: std::env::var("BINANCE_API_SECRET")
-                .or_else(|_| std::env::var("EXCHANGE_API_SECRET"))
-                .unwrap_or_default(),
-            exchange_base_url: env_str("EXCHANGE_BASE_URL", "https://api.binance.com"),
             wallet_password: std::env::var("WALLET_PASSWORD").unwrap_or_default(),
             scanner_interval_secs: env_u64("BTC_SCANNER_INTERVAL_SECS", 900),
             report_interval_mins: env_u64("BTC_REPORT_INTERVAL_MINS", 5),

@@ -1,0 +1,26 @@
+{
+  "accounts": [
+    {
+      "id": "main",
+      "label": "Main Treasury",
+      "telegram_chat_ids": [],
+      "exchanges": [
+        {
+          "kind": "binance",
+          "api_key": "test_binance_key_xxxxxxxxxx",
+          "api_secret": "test_binance_secret_yyy",
+          "scanner_pairs": ["SOLBTC", "ETHBTC"],
+          "enabled": true
+        },
+        {
+          "kind": "okx",
+          "api_key": "test_okx_key_xxxxxxxxxx",
+          "api_secret": "test_okx_secret_zzzzz",
+          "passphrase": "test_passphrase",
+          "scanner_pairs": ["SOLBTC", "ETHBTC"],
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

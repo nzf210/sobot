@@ -1,30 +1,90 @@
-//! Per-account runtime (Fase 1).
+//! Per-account runtime (Fase 1, expanded in Fase 3, hardened in Fase 4).
 //!
 //! One `AccountRuntime` is the owned bundle of `MemoryStore + scanner +
-//! position-monitor + ExecutionEngine + reporter` for a single (exchange,
-//! account_id). `main.rs` builds one runtime per `AccountSpec` and `spawn`s
-//! the scanner, monitor, and per-account reporter onto the tokio runtime.
-//! `MultiExchangeClient` continues to provide the cross-account client
-//! lookup (`for_account(key)`) so the Telegram bot can route commands to
-//! the active account per chat.
+//! position-monitor + ExecutionEngine + reporter` for a single
+//! `(exchange, account_id)` tuple. `main.rs` builds one runtime per
+//! `AccountSpec` and `spawn`s the scanner, monitor, and per-account reporter
+//! onto the tokio runtime. `MultiExchangeClient` continues to provide the
+//! cross-account client lookup (`for_account(key)`) so the Telegram bot can
+//! route commands to the active account per chat.
+//!
+//! Fase 3 adds `pub key: AccountKey` and `pub spec: AccountSpec` so callers
+//! (bot, reporter, main) can identify which `(id, exchange)` a runtime
+//! represents without re-parsing the spec list.
+//!
+//! Fase 4 adds `pub status: Arc<AccountStatus>` — a lightweight heartbeat +
+//! restart counter shared between the supervisor loop in `main.rs` and the
+//! `GET /btc/accounts` HTTP endpoint in `server.rs`.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 
 use crate::account_spec::AccountSpec;
 use crate::exchange::ExchangeClient;
 use crate::execution_engine::ExecutionEngine;
 use crate::memory::MemoryStore;
+use crate::multi_exchange::AccountKey;
 use crate::position_monitor::PositionMonitor;
 use crate::scanner::ScannerState;
+
+/// Runtime health for one `(exchange, account_id)` binding.
+///
+/// Written by the supervisor loop in `main.rs`, read by
+/// `GET /btc/accounts` in `server.rs` and `/btc_status` in Telegram.
+///
+/// `last_heartbeat_unix` is the Unix timestamp (seconds) of the last
+/// successful scanner tick. `restart_count` increments each time the
+/// supervisor restarts the inner task after a panic. Both are atomics so
+/// they can be updated from spawned tasks without locking.
+pub struct AccountStatus {
+    /// Unix timestamp (seconds) of the last scanner heartbeat. 0 = never.
+    pub last_heartbeat_unix: AtomicI64,
+    /// Number of times the supervisor has restarted this account's tasks.
+    pub restart_count: AtomicU32,
+}
+
+impl AccountStatus {
+    pub fn new() -> Self {
+        Self {
+            last_heartbeat_unix: AtomicI64::new(0),
+            restart_count: AtomicU32::new(0),
+        }
+    }
+
+    /// Record a heartbeat — call from the scanner loop each tick.
+    pub fn touch(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        self.last_heartbeat_unix.store(now, Ordering::Relaxed);
+    }
+
+    pub fn heartbeat_unix(&self) -> i64 {
+        self.last_heartbeat_unix.load(Ordering::Relaxed)
+    }
+
+    pub fn restarts(&self) -> u32 {
+        self.restart_count.load(Ordering::Relaxed)
+    }
+
+    pub fn increment_restart(&self) {
+        self.restart_count.fetch_add(1, Ordering::Relaxed);
+    }
+}
 
 /// Per-account runtime. Owns the per-account `MemoryStore`, scanner state,
 /// and live task handles. Built once in `main.rs` per `AccountSpec`.
 pub struct AccountRuntime {
+    pub key: AccountKey,
+    pub spec: AccountSpec,
     pub account_id: String,
     pub exchange: Arc<dyn ExchangeClient>,
     pub mem: Arc<MemoryStore>,
     pub scanner_state: Arc<ScannerState>,
     pub executor: Arc<ExecutionEngine>,
+    /// Live health counters — updated by the supervisor, read by HTTP/Telegram.
+    pub status: Arc<AccountStatus>,
 }
 
 impl AccountRuntime {
@@ -33,12 +93,24 @@ impl AccountRuntime {
     /// `non_async_init` helper below provides a sync version that uses
     /// `tokio::runtime::Handle::current().block_on` — call it from a tokio
     /// context (which `main.rs` always is).
+    ///
+    /// The returned runtime includes an `Arc<AccountStatus>` that can be
+    /// passed to the supervisor loop in `main.rs` for heartbeat + restart
+    /// tracking, and to `GET /btc/accounts` for per-account health reporting.
     pub fn build(
         spec: &AccountSpec,
         exchange: Arc<dyn ExchangeClient>,
         data_dir: &str,
     ) -> Self {
-        let mem = Arc::new(MemoryStore::with_account(data_dir, Some(&spec.id)));
+        // Pass `Some(spec.exchange)` so MemoryStore knows which (id, exchange)
+        // this runtime belongs to. The default-account flat-layout special
+        // case in MemoryStore handles the "1 account, 2 exchanges" backward
+        // compat path: with id=default, the layered subdir is skipped.
+        let mem = Arc::new(MemoryStore::with_account(
+            data_dir,
+            Some(&spec.id),
+            Some(spec.exchange),
+        ));
         let scanner_state = Arc::new(ScannerState::new());
         let executor = Arc::new(ExecutionEngine::new(Some(Arc::clone(&exchange)), mem.clone()));
 
@@ -60,21 +132,27 @@ impl AccountRuntime {
             mem.save_config(&saved_cfg);
         }
 
+        let key = AccountKey::from_spec(spec);
+        let status = Arc::new(AccountStatus::new());
         Self {
+            key,
+            spec: spec.clone(),
             account_id: spec.id.clone(),
             exchange,
             mem,
             scanner_state,
             executor,
+            status,
         }
     }
 
     /// Build a position monitor for this account. Caller spawns it.
     pub fn build_monitor(&self, engine: Arc<crate::engine::AdvisoryEngine>) -> Arc<PositionMonitor> {
+        let label = format!("{}/{}", self.spec.exchange.as_str(), self.account_id);
         Arc::new(PositionMonitor::new(
             self.mem.clone(),
             Some(Arc::clone(&self.exchange)),
             engine,
-        ))
+        ).with_label(label))
     }
 }

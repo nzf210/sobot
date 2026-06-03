@@ -201,15 +201,23 @@ pub async fn run(
     executor: Arc<ExecutionEngine>,
     mem: Arc<MemoryStore>,
     interval_secs: u64,
+    status: Arc<crate::account_runtime::AccountStatus>,
 ) {
     let mut tick = interval(Duration::from_secs(interval_secs));
-    tracing::info!("Multi-pair scanner started (every {}s) on {}", interval_secs, exchange.exchange_name());
+    let exname = exchange.exchange_name().to_string();
+    tracing::info!(
+        exchange = %exname,
+        "Multi-pair scanner started (every {}s)", interval_secs
+    );
 
     loop {
         tick.tick().await;
+        // Touch heartbeat — supervisor + /btc/accounts can see this runtime is alive.
+        status.touch();
+
         let pairs = state.get_pairs().await;
         if pairs.is_empty() {
-            tracing::warn!("Scanner: no pairs configured");
+            tracing::warn!(exchange = %exname, "Scanner: no pairs configured");
             continue;
         }
 

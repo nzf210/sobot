@@ -90,6 +90,20 @@ impl MultiExchangeClient {
         self.accounts.get(key).cloned()
     }
 
+    /// Return every `(AccountKey, client)` pair that shares the given
+    /// `account_id`. With a single Binance spec the vec has one entry;
+    /// with `EXCHANGE_NAME=both` or a per-account JSON declaring two
+    /// exchanges under one id, the vec has 2+ entries — that's the
+    /// "1 account, 2 exchanges" lookup the bot uses to render per-binding
+    /// status blocks.
+    pub fn for_account_id(&self, account_id: &str) -> Vec<(AccountKey, Arc<dyn ExchangeClient>)> {
+        self.accounts
+            .iter()
+            .filter(|(k, _)| k.account_id == account_id)
+            .map(|(k, c)| (k.clone(), c.clone()))
+            .collect()
+    }
+
     /// List account summaries for `/btc/accounts` (Fase 1 will expand this with status).
     pub fn list(&self) -> Vec<AccountSummary> {
         self.accounts
@@ -210,6 +224,62 @@ mod tests {
         assert_eq!(client.exchange_name(), "OKX");
         assert!(client.api_key_display().contains("okx"));
 
+        std::env::remove_var("OKX_TEST_KEY");
+        std::env::remove_var("OKX_TEST_SECRET");
+        std::env::remove_var("OKX_TEST_PASSPHRASE");
+    }
+
+    #[test]
+    fn for_account_id_returns_all_exchanges_for_id() {
+        // 1 account, 2 exchanges — Binance + OKX both under id="main".
+        std::env::set_var("BINANCE_TEST_KEY", "binance_key");
+        std::env::set_var("BINANCE_TEST_SECRET", "binance_secret");
+        std::env::set_var("OKX_TEST_KEY", "okx_key");
+        std::env::set_var("OKX_TEST_SECRET", "okx_secret");
+        std::env::set_var("OKX_TEST_PASSPHRASE", "okx_pass");
+
+        let binance_spec = AccountSpec {
+            id: "main".into(),
+            label: "B".into(),
+            exchange: ExchangeKind::Binance,
+            credentials: Credentials::EnvKeySecret {
+                key_env: "BINANCE_TEST_KEY".into(),
+                secret_env: "BINANCE_TEST_SECRET".into(),
+                passphrase_env: None,
+            },
+            scanner_pairs: vec!["SOLBTC".into()],
+            telegram_chat_ids: vec![],
+            risk: RiskOverrides::default(),
+            enabled: true,
+        };
+        let okx_spec = AccountSpec {
+            id: "main".into(),
+            label: "O".into(),
+            exchange: ExchangeKind::Okx,
+            credentials: Credentials::EnvKeySecret {
+                key_env: "OKX_TEST_KEY".into(),
+                secret_env: "OKX_TEST_SECRET".into(),
+                passphrase_env: Some("OKX_TEST_PASSPHRASE".into()),
+            },
+            scanner_pairs: vec!["SOLBTC".into()],
+            telegram_chat_ids: vec![],
+            risk: RiskOverrides::default(),
+            enabled: true,
+        };
+
+        let m = MultiExchangeClient::from_specs(&[binance_spec, okx_spec]);
+        let main_bindings = m.for_account_id("main");
+        assert_eq!(main_bindings.len(), 2, "id=main should have 2 exchange bindings");
+        let names: Vec<&str> = main_bindings.iter().map(|(k, _)| k.exchange.as_str()).collect();
+        assert!(names.contains(&"binance"));
+        assert!(names.contains(&"okx"));
+
+        // Default key is the first binding — Binance in this case.
+        let default = m.default().expect("default");
+        assert_eq!(default.exchange_name(), "Binance");
+
+        std::env::remove_var("BINANCE_TEST_KEY");
+        std::env::remove_var("BINANCE_TEST_SECRET");
         std::env::remove_var("OKX_TEST_KEY");
         std::env::remove_var("OKX_TEST_SECRET");
         std::env::remove_var("OKX_TEST_PASSPHRASE");

@@ -13,6 +13,8 @@ pub struct PositionMonitor {
     mem: Arc<MemoryStore>,
     exchange: Option<Arc<dyn ExchangeClient>>,
     engine: Arc<AdvisoryEngine>,
+    /// Human-readable `exchange/account_id` label for log spans.
+    label: String,
 }
 
 impl PositionMonitor {
@@ -21,12 +23,18 @@ impl PositionMonitor {
         exchange: Option<Arc<dyn ExchangeClient>>,
         engine: Arc<AdvisoryEngine>,
     ) -> Self {
-        Self { mem, exchange, engine }
+        Self { mem, exchange, engine, label: String::new() }
+    }
+
+    /// Attach a `"exchange/account_id"` label used in log spans.
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
     }
 
     /// Start the monitoring loop — polls every 30 seconds.
     pub async fn start(self: Arc<Self>) {
-        tracing::info!("BTC Position Monitor started");
+        tracing::info!(label = %self.label, "BTC Position Monitor started");
         let mut tick = interval(Duration::from_secs(30));
 
         loop {

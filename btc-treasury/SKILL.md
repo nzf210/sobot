@@ -1,13 +1,17 @@
 # BTC Treasury Accumulation AI — Skills
 
-> **Mission:** Akumulasi BTC secara konsisten melalui Binance Spot trading.
+> **Mission:** Akumulasi BTC secara konsisten melalui Spot trading (Binance dan/atau OKX).
 > Target: BTC(t+1) > BTC(t). Setiap trade harus menambah BTC holdings.
-> Modal: $50. Maks 1 posisi aktif. Maks 1% risiko per trade.
+> Modal: $50. Maks 1 posisi aktif per exchange. Maks 1% risiko per trade.
 > TP: 3-8%. SL: 1-2%. AI Score ≥ 80 = AMBIL POSISI, < 80 = DO NOTHING.
 
-## Exchange
+## Exchange (Fase 3+: Multi-Exchange)
 
-**Binance Spot ONLY.** No futures, no perpetual, no leverage.
+**Binance Spot + OKX Spot.** No futures, no perpetual, no leverage.
+
+Satu account (`id`) dapat menjalankan **dua exchange sekaligus** — masing-masing
+mendapat scanner, monitor, MemoryStore, dan laporan Telegram tersendiri.
+Konfigurasi via `btc-accounts.json` (lihat §16).
 
 ## Pair Format
 
@@ -138,30 +142,35 @@ Always measured in BTC, not USD:
 
 ## 12. Telegram Commands
 
-| Command                    | Description                              |
-|----------------------------|------------------------------------------|
-| `/btc_status`              | Binance Spot balance + BTC holdings      |
-| `/btc_market [PAIR]`       | Live market data + OHLCV                 |
-| `/btc_advisory [PAIR]`     | Full quant + LLM advisory                |
-| `/btc_treasury`            | BTC holdings, vault, compound, stats      |
-| `/btc_positions`           | Open positions with TP/SL/trailing       |
-| `/btc_pairs`               | List active BTC-quote pairs              |
-| `/btc_addpair <PAIR>`      | Add pair (e.g. SOLBTC, ETHBTC, SUIBTC)   |
-| `/btc_removepair <PAIR>`   | Remove pair from scanner                 |
-| `/btc_discover`            | Show popular BTC-quote pairs to add      |
-| `/btc_pairinfo <PAIR>`     | Detailed AI scores for one pair         |
-| `/btc_scan [PAIR]`         | Scanner stats + AI scores                |
-| `/btc_history`             | Last 10 decisions                        |
-| `/btc_lessons`             | Recent self-learning lessons             |
-| `/btc_config`              | Current config (TP/SL/thresholds)        |
-| `/btc_setconfig <k> <v>`   | Update config live                       |
-| `/btc_enable`              | Enable LLM advisory                      |
-| `/btc_disable`             | Disable LLM advisory                     |
-| `/btc_buy <SIZE> <PAIR>`   | Market buy + dynamic TP/SL               |
-| `/btc_sell`                | Close position at market price            |
-| `/btc_cancel`              | Cancel all open orders                   |
-| `/btc_skills`              | Full capabilities                         |
-| `/help`                    | Help message                             |
+| Command                       | Description                                        |
+|-------------------------------|----------------------------------------------------|
+| `/btc_status`                 | Balance + BTC holdings (per exchange if multi)     |
+| `/btc_market [PAIR]`          | Live market data + OHLCV                           |
+| `/btc_advisory [PAIR]`        | Full quant + LLM advisory                          |
+| `/btc_treasury`               | BTC holdings, vault, compound, stats               |
+| `/btc_positions`              | Open positions with TP/SL/trailing                 |
+| `/btc_pairs`                  | List active BTC-quote pairs                        |
+| `/btc_addpair <PAIR>`         | Add pair (e.g. SOLBTC, ETHBTC, SUIBTC)             |
+| `/btc_removepair <PAIR>`      | Remove pair from scanner                           |
+| `/btc_discover`               | Auto-discover BTC-quote pairs from exchange        |
+| `/btc_pairinfo <PAIR>`        | Detailed AI scores for one pair                    |
+| `/btc_scan [PAIR]`            | Scanner stats + AI scores                          |
+| `/btc_history`                | Last 10 decisions                                  |
+| `/btc_lessons`                | Recent self-learning lessons                       |
+| `/btc_config`                 | Current config (TP/SL/thresholds)                  |
+| `/btc_setconfig <k> <v>`      | Update config live                                 |
+| `/btc_enable`                 | Enable LLM advisory                                |
+| `/btc_disable`                | Disable LLM advisory                               |
+| `/btc_buy <SIZE> <PAIR>`      | Market buy + dynamic TP/SL                         |
+| `/btc_sell`                   | Close ALL positions at market price                |
+| `/btc_close <index>`          | Close position by index (1-based)                  |
+| `/btc_closeall`               | Force close all positions                          |
+| `/btc_cancel`                 | Cancel all open orders                             |
+| `/btc_use <id> [exchange]`    | Switch active account/exchange for this chat       |
+| `/btc_accounts`               | List all configured accounts + status              |
+| `/btc_aggregate`              | Aggregate BTC + trades across all bindings         |
+| `/btc_skills`                 | Full capabilities                                  |
+| `/help`                       | Help message                                       |
 
 **PAIR format**: `SYMBOLBTC` (e.g. `SOLBTC`, `ETHBTC`, `DOGEBTC`, `SUIBTC`)
 
@@ -209,5 +218,66 @@ BTC Treasury grows → Ready for next position
 
 ---
 **Sources:** `src/engines/`, `src/indicators.rs`, `src/execution_engine.rs`, `src/engine.rs`, `src/models.rs`
-**Exchange:** Binance Spot ONLY
+**Exchange:** Binance Spot + OKX Spot (configurable via `btc-accounts.json`)
 **Goal:** Continuously grow BTC holdings through disciplined spot trading.
+
+## 16. Multi-Exchange Config (Fase 3)
+
+Buat file `btc-accounts.json` di `data_dir` (atau `DATA_BTC_DIR`):
+
+```json
+{
+  "accounts": [
+    {
+      "id": "main",
+      "label": "Main Treasury",
+      "telegram_chat_ids": [],
+      "exchanges": [
+        {
+          "kind": "binance",
+          "api_key": "YOUR_BINANCE_KEY",
+          "api_secret": "YOUR_BINANCE_SECRET",
+          "scanner_pairs": ["SOLBTC", "ETHBTC"],
+          "enabled": true
+        },
+        {
+          "kind": "okx",
+          "api_key": "YOUR_OKX_KEY",
+          "api_secret": "YOUR_OKX_SECRET",
+          "passphrase": "YOUR_OKX_PASSPHRASE",
+          "scanner_pairs": ["SOLBTC", "ETHBTC"],
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+Loader priority (highest → lowest):
+1. `BTC_ACCOUNTS_JSON` env var (raw JSON string)
+2. `{data_dir}/btc-accounts.json` file
+3. `{data_dir}/accounts/{id}/accounts.json` dirs
+4. Legacy `BINANCE_API_KEY` / `OKX_API_KEY` env vars + `EXCHANGE_NAME`
+
+`TELEGRAM_WHITELIST_USER_BTC_IDS` stays in `.env` — never in JSON.
+
+### State isolation per (id, exchange)
+
+```
+data_dir/
+├── accounts/
+│   └── main/
+│       ├── binance/   ← Binance state: treasury, positions, decisions
+│       └── okx/       ← OKX state: isolated, no cross-contamination
+```
+
+Legacy `id=default` keeps flat layout at `data_dir/` for backward compat.
+
+## 17. Supervisor (Fase 4)
+
+Scanner + monitor per account run inside a supervisor loop.
+- Panic → restart with exponential backoff (5s → 10s → … → 300s max)
+- Restart count visible in `/btc_status` (⚠️ Restarts: N)
+- Heartbeat age visible in `/btc_status` (✅ Last tick Xs ago)
+- One exchange crashing does NOT affect the other exchange's runtime

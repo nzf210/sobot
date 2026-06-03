@@ -19,16 +19,14 @@ mod sanitize;
 mod scanner;
 mod server;
 mod telegram_bot;
+mod util;
 
 use std::sync::Arc;
 
 use tracing_subscriber::EnvFilter;
 
 use crate::account_runtime::AccountRuntime;
-use crate::exchange::ExchangeClient;
-use crate::execution_engine::ExecutionEngine;
 use crate::multi_exchange::MultiExchangeClient;
-use crate::position_monitor::PositionMonitor;
 use crate::scanner::ScannerState;
 
 #[tokio::main]
@@ -46,11 +44,12 @@ async fn main() -> std::io::Result<()> {
     // to the chat's active account.
     let shared = server::init(&cfg).await?;
 
-    // ── Fase 1: load all account specs (legacy default + any from env/JSON).
-    // Legacy env (BINANCE_API_KEY/BINANCE_API_SECRET) yields exactly one
-    // `default` spec, identical to pre-Fase-1 behavior. Multi-account config
-    // (BTC_ACCOUNTS_JSON, Fase 1.5) can produce N specs; the loop below
-    // spawns one scanner + monitor + reporter per spec.
+    // ── Fase 3: load all account specs. Three sources, in priority order:
+    //   1. BTC_ACCOUNTS_JSON env var (raw JSON string)
+    //   2. data_dir/btc-accounts.json or data_dir/accounts/{id}/accounts.json
+    //   3. Legacy env-var fan-out via EXCHANGE_NAME=both / binance,okx / binance
+    // Two specs sharing the same `id` (one Binance + one OKX) is the
+    // "1 account, 2 exchanges" model.
     let account_specs = account_spec::load_account_specs(
         &cfg.exchange_name,
         cfg.scanner_pairs.clone(),
@@ -58,29 +57,37 @@ async fn main() -> std::io::Result<()> {
     if let Err(e) = account_spec::validate(&account_specs) {
         tracing::error!("Invalid account spec: {}", e);
     }
+    if account_specs.len() > 1
+        && account_specs.iter().any(|s| s.id == "default")
+    {
+        tracing::warn!(
+            "Multiple account specs share id='default' — they will share the legacy \
+             flat layout at data_dir/. Create a named id (e.g. 'main') in accounts.json \
+             to isolate per-exchange state."
+        );
+    }
 
-    // Build the dispatcher and the per-account runtimes in parallel. The
-    // dispatcher is the lookup table for the Telegram bot / HTTP server.
+    // Build the dispatcher and the per-account runtimes. The dispatcher is
+    // the lookup table for the Telegram bot / HTTP server.
     let dispatcher = MultiExchangeClient::from_specs(&account_specs);
 
-    // Legacy path: a single `default` account means the BotShared mem/engine
-    // is the active account. We mirror that account's MemoryStore into the
-    // BotShared struct so server.rs continues to work without a refactor.
-    let default_runtime: Option<AccountRuntime> = if let Some(spec) = account_specs.first() {
+    // Build one runtime per spec. Each gets its own scanner + monitor + mem.
+    // With N specs, the loop spawns N scanner tasks and N monitor tasks.
+    let mut runtimes: Vec<Arc<AccountRuntime>> = Vec::new();
+    for spec in &account_specs {
         let key = crate::multi_exchange::AccountKey::from_spec(spec);
-        dispatcher
-            .for_account(&key)
-            .map(|exchange| {
-                AccountRuntime::build(spec, exchange, &cfg.data_dir)
-            })
-    } else {
-        None
-    };
+        let Some(exchange) = dispatcher.for_account(&key) else {
+            tracing::warn!(
+                "Skipping spec {}/{} — dispatcher could not build a client (credentials unresolved?)",
+                spec.id, spec.exchange.as_str()
+            );
+            continue;
+        };
+        let rt = Arc::new(AccountRuntime::build(spec, exchange, &cfg.data_dir));
 
-    // If we have a default runtime, sync its treasury with the live balances
-    // (same behavior as pre-Fase-1). This is also what `sync_initial_balances`
-    // depends on so the first risk calc sees a real value, not zero.
-    if let Some(rt) = default_runtime.as_ref() {
+        // Sync initial balances for THIS runtime. With multiple exchanges
+        // under one id, each runtime syncs against its own exchange so the
+        // local ledger matches the live balance per exchange.
         match rt.exchange.get_balances().await {
             Ok(balances) => {
                 let live_btc: f64 = balances.iter()
@@ -96,65 +103,156 @@ async fn main() -> std::io::Result<()> {
             }
             Err(e) => {
                 tracing::error!(
-                    "Failed to fetch live balances for treasury sync: {} — \
+                    "Failed to fetch live balances for treasury sync ({}/{}): {} — \
                      btc-treasury.json will keep its existing (likely 0.0) values until next close",
-                    e
+                    spec.id, spec.exchange.as_str(), e
                 );
             }
         }
+
+        // Spawn scanner + monitor for this runtime, wrapped in a supervisor
+        // loop that restarts on panic with exponential backoff (cap 5 min).
+        // After MAX_RESTARTS_BEFORE_ALERT consecutive restarts, a warning is
+        // logged; caller can wire a Telegram alert here in the future.
+        const MAX_RESTARTS_BEFORE_ALERT: u32 = 3;
+
+        {
+            let exchange = Arc::clone(&rt.exchange);
+            let engine_c = Arc::clone(&shared.engine);
+            let mem_c = rt.mem.clone();
+            let interval_c = cfg.scanner_interval_secs;
+            let scanner_c = Arc::clone(&rt.scanner_state);
+            let executor_c = Arc::clone(&rt.executor);
+            let status_c = Arc::clone(&rt.status);
+            let account_id_c = spec.id.clone();
+            let exchange_name_c = spec.exchange.as_str().to_string();
+            tokio::spawn(async move {
+                let mut backoff_secs: u64 = 5;
+                loop {
+                    let ex2 = Arc::clone(&exchange);
+                    let eng2 = Arc::clone(&engine_c);
+                    let mem2 = mem_c.clone();
+                    let sc2 = Arc::clone(&scanner_c);
+                    let ex2c = Arc::clone(&executor_c);
+                    let st2 = Arc::clone(&status_c);
+                    let handle = tokio::spawn(async move {
+                        scanner::run(sc2, ex2, eng2, ex2c, mem2, interval_c, st2).await;
+                    });
+                    match handle.await {
+                        Ok(_) => break, // clean exit
+                        Err(e) if e.is_panic() => {
+                            let restarts = status_c.restarts();
+                            status_c.increment_restart();
+                            if restarts >= MAX_RESTARTS_BEFORE_ALERT {
+                                tracing::error!(
+                                    account_id = %account_id_c,
+                                    exchange = %exchange_name_c,
+                                    restarts = restarts + 1,
+                                    "Scanner panicked {} times — restarting in {}s",
+                                    restarts + 1, backoff_secs
+                                );
+                            } else {
+                                tracing::warn!(
+                                    account_id = %account_id_c,
+                                    exchange = %exchange_name_c,
+                                    "Scanner panicked — restarting in {}s", backoff_secs
+                                );
+                            }
+                            tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)).await;
+                            backoff_secs = (backoff_secs * 2).min(300); // cap 5 min
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                account_id = %account_id_c,
+                                exchange = %exchange_name_c,
+                                "Scanner task join error: {} — not restarting", e
+                            );
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+        {
+            let engine_m = Arc::clone(&shared.engine);
+            let status_m = Arc::clone(&rt.status);
+            let account_id_m = spec.id.clone();
+            let exchange_name_m = spec.exchange.as_str().to_string();
+            let monitor = rt.build_monitor(engine_m);
+            tokio::spawn(async move {
+                let mut backoff_secs: u64 = 5;
+                loop {
+                    let mon2 = Arc::clone(&monitor);
+                    let handle = tokio::spawn(async move {
+                        mon2.start().await;
+                    });
+                    match handle.await {
+                        Ok(_) => break,
+                        Err(e) if e.is_panic() => {
+                            status_m.increment_restart();
+                            tracing::warn!(
+                                account_id = %account_id_m,
+                                exchange = %exchange_name_m,
+                                "Monitor panicked — restarting in {}s", backoff_secs
+                            );
+                            tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)).await;
+                            backoff_secs = (backoff_secs * 2).min(300);
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                account_id = %account_id_m,
+                                exchange = %exchange_name_m,
+                                "Monitor task join error: {} — not restarting", e
+                            );
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+        tracing::info!(
+            "BTC scanner + monitor started for {}/{}",
+            spec.id, spec.exchange.as_str()
+        );
+        runtimes.push(rt);
     }
 
-    // Scanner + monitor spawn (one per account, with a default-account fast
-    // path that preserves the exact pre-Fase-1 log messages and code path).
-    let scanner_state_for_bot: Option<Arc<ScannerState>> = if let Some(rt) = default_runtime.as_ref() {
-        let exchange = Arc::clone(&rt.exchange);
-        let engine = Arc::clone(&shared.engine);
-        let mem = rt.mem.clone();
-        let interval = cfg.scanner_interval_secs;
-        let scanner = Arc::clone(&rt.scanner_state);
-        let executor = Arc::clone(&rt.executor);
+    if runtimes.is_empty() {
+        tracing::warn!("Scanner disabled — no exchange API key configured");
+    }
 
-        tokio::spawn(async move {
-            scanner::run(scanner, exchange, engine, executor, mem, interval).await;
-        });
+    // Per-account runtime map keyed by `(exchange, account_id)`. The bot's
+    // `chat_id → AccountKey` lookup resolves commands to a single runtime.
+    // Aggregate commands iterate this map. With one `default` account the
+    // map has one entry, so single-account users see byte-identical behavior.
+    let per_account: std::collections::HashMap<crate::multi_exchange::AccountKey, Arc<AccountRuntime>> =
+        runtimes.iter().map(|r| (r.key.clone(), Arc::clone(r))).collect();
 
-        // Position monitor
-        let monitor = rt.build_monitor(Arc::clone(&shared.engine));
-        tokio::spawn(async move {
-            monitor.start().await;
-        });
-        tracing::info!("BTC Position Monitor started");
+    // Pick one scanner state for the bot's "single scanner stats" view
+    // (used by the legacy `/btc_scan` path that doesn't take an exchange
+    // arg). First runtime wins; with one account this is the only runtime.
+    let scanner_state_for_bot: Option<Arc<ScannerState>> = runtimes.first()
+        .map(|r| Arc::clone(&r.scanner_state));
 
-        Some(rt.scanner_state.clone())
-    } else {
-        tracing::warn!("Scanner disabled — exchange API key not configured");
-        None
-    };
-
-    // Per-account runtime map — built once, shared by the reporter and the
-    // Telegram bot. With one `default` account the map has one entry, so
-    // single-account users see byte-identical behavior.
-    let per_account = build_per_account_map(&account_specs, &dispatcher, &cfg.data_dir, &shared.engine);
-
-    // Reporter — per-account loop. With one `default` account the output
-    // matches pre-Fase-1.5 byte-for-byte (no per-account prefix). With N
-    // accounts each gets its own report prefixed with [account_id] plus an
-    // aggregate digest appended to the first account's chat list.
+    // Reporter — per-(id, exchange) loop. Each runtime emits its own report
+    // prefixed with `[id/exchange]` (or just `[id]` when only one exchange
+    // exists for that id). The aggregate footer sums across all runtimes
+    // and is sent to the first runtime's chat list to avoid spamming every
+    // chat with the same digest.
     if !cfg.telegram_report_chat_ids.is_empty() {
         let mut reports = Vec::new();
-        for spec in &account_specs {
-            if let Some(rt) = per_account.get(&spec.id) {
-                let mut chats = spec.telegram_chat_ids.clone();
-                if chats.is_empty() {
-                    chats = cfg.telegram_report_chat_ids.clone();
-                }
-                reports.push(reporter::PerAccountReport {
-                    account_id: spec.id.clone(),
-                    state: rt.scanner_state.clone(),
-                    mem: rt.mem.clone(),
-                    chat_ids: chats,
-                });
+        for (rt, spec) in runtimes.iter().zip(account_specs.iter()) {
+            let mut chats = spec.telegram_chat_ids.clone();
+            if chats.is_empty() {
+                chats = cfg.telegram_report_chat_ids.clone();
             }
+            reports.push(reporter::PerAccountReport {
+                account_id: spec.id.clone(),
+                exchange: spec.exchange,
+                state: rt.scanner_state.clone(),
+                mem: rt.mem.clone(),
+                chat_ids: chats,
+            });
         }
         if !reports.is_empty() {
             let token = cfg.telegram_bot_token.clone();
@@ -172,9 +270,6 @@ async fn main() -> std::io::Result<()> {
 
     // Telegram Bot
     if !cfg.telegram_bot_token.is_empty() {
-        // Build the per-account map for multi-account routing. With one
-        // `default` account, the bot behaves identically to pre-Fase-1
-        // because every chat's active account resolves to `default`.
         let bot = Arc::new(telegram_bot::BtcBot::new(
             cfg.telegram_bot_token.clone(),
             cfg.telegram_whitelist.clone(),
@@ -216,25 +311,4 @@ async fn main() -> std::io::Result<()> {
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     tracing::info!("BTC Treasury shut down cleanly");
     Ok(())
-}
-
-/// Build a map of `account_id → AccountRuntime` for the Telegram bot's
-/// per-account routing. With one `default` account the map has one entry;
-/// with N accounts it has N. The bot stores `chat_id → active_account_id`
-/// in its own state and resolves commands against this map.
-fn build_per_account_map(
-    specs: &[crate::account_spec::AccountSpec],
-    dispatcher: &MultiExchangeClient,
-    data_dir: &str,
-    _engine: &Arc<crate::engine::AdvisoryEngine>,
-) -> std::collections::HashMap<String, Arc<AccountRuntime>> {
-    let mut map = std::collections::HashMap::new();
-    for spec in specs {
-        let key = crate::multi_exchange::AccountKey::from_spec(spec);
-        if let Some(exchange) = dispatcher.for_account(&key) {
-            let rt = AccountRuntime::build(spec, exchange, data_dir);
-            map.insert(spec.id.clone(), Arc::new(rt));
-        }
-    }
-    map
 }

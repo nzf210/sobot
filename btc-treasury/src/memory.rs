@@ -2,18 +2,31 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
+use crate::account_spec::ExchangeKind;
 use crate::models::*;
 
-/// Per-account state store. When `account_id` is `None` the store reads/writes
-/// the legacy flat layout under `data_dir` (btc-treasury.json, etc.) — this
-/// preserves backward compatibility for users running a single `default`
-/// Binance account with the pre-Fase-1 setup. When `account_id` is `Some(id)`,
-/// state lives under `data_dir/accounts/{id}/` so two accounts can never race
-/// on the same JSON file.
+/// Per-account, per-exchange state store (Fase 3).
+///
+/// Layout:
+///
+/// | `account_id`         | `exchange`     | Filesystem path                             |
+/// |----------------------|----------------|---------------------------------------------|
+/// | `None`               | `None`         | `data_dir/...`                              |
+/// | `Some("default")`    | `None`         | `data_dir/...` (legacy single-account)      |
+/// | `Some("default")`    | `Some(_)`      | `data_dir/...` (legacy compat — no subdir)  |
+/// | `Some(other)`        | `None`         | `data_dir/accounts/{id}/...`                |
+/// | `Some(other)`        | `Some(ex)`     | `data_dir/accounts/{id}/{ex}/...`           |
+///
+/// The legacy `default` account keeps the flat layout even when an exchange
+/// is provided — this preserves byte-for-byte compatibility with Fase 2
+/// single-account users. New named accounts created post-Fase 3 get the
+/// layered subdir so two exchanges under the same id never collide on
+/// `btc-treasury.json`.
 pub struct MemoryStore {
     data_dir: PathBuf,
     account_dir: PathBuf,
     account_id: Option<String>,
+    exchange_kind: Option<ExchangeKind>,
     lock: RwLock<()>,
 }
 
@@ -21,32 +34,49 @@ impl MemoryStore {
     /// Build a store rooted at `data_dir` for the default (legacy) account.
     /// Files live directly in `data_dir` (e.g. `btc-treasury.json`).
     pub fn new(data_dir: &str) -> Self {
-        Self::with_account(data_dir, None)
+        Self::with_account(data_dir, None, None)
     }
 
-    /// Build a store scoped to a specific account. Pass `Some("default")` or
-    /// `None` to use the legacy flat layout; pass any other id to use the
-    /// per-account subdir `data_dir/accounts/{id}/`.
-    pub fn with_account(data_dir: &str, account_id: Option<&str>) -> Self {
+    /// Build a store scoped to a specific account and exchange. See struct
+    /// doc for the layout table.
+    ///
+    /// `account_id == Some("default")` is treated as the legacy flat layout
+    /// regardless of `exchange`, so users running the default account under
+    /// multiple exchanges (via `EXCHANGE_NAME=both`) keep their state in
+    /// `data_dir/btc-treasury.json`. This is intentional: a Fase 2 user
+    /// upgrading to Fase 3 with no per-account JSON file continues to see
+    /// byte-identical behavior.
+    pub fn with_account(
+        data_dir: &str,
+        account_id: Option<&str>,
+        exchange: Option<ExchangeKind>,
+    ) -> Self {
         let dir = PathBuf::from(data_dir);
         fs::create_dir_all(&dir).expect("Failed to create data directory");
 
-        // Per-account path: only when account_id is Some(non-default).
-        // "default" maps to the legacy flat layout so the single-account
-        // upgrade path keeps the user's existing files intact.
-        let use_subdir = matches!(account_id, Some(id) if !id.is_empty() && id != "default");
-        let account_dir = if use_subdir {
-            let sub = dir.join("accounts").join(account_id.unwrap());
-            fs::create_dir_all(&sub).expect("Failed to create account data directory");
-            sub
-        } else {
-            dir.clone()
+        let is_legacy_default = matches!(account_id, None | Some("default"));
+        let account_dir = match (account_id, exchange, is_legacy_default) {
+            // Named id + explicit exchange → layered subdir (Fase 3 isolation)
+            (Some(id), Some(ex), false) => {
+                let sub = dir.join("accounts").join(id).join(ex.as_str());
+                fs::create_dir_all(&sub).expect("Failed to create account data directory");
+                sub
+            }
+            // Named id without exchange (Fase 2 upgrade path) → single subdir
+            (Some(id), None, false) => {
+                let sub = dir.join("accounts").join(id);
+                fs::create_dir_all(&sub).expect("Failed to create account data directory");
+                sub
+            }
+            // Default account (with or without exchange) → flat data_dir
+            _ => dir.clone(),
         };
 
         let store = Self {
             data_dir: dir,
             account_dir,
             account_id: account_id.map(|s| s.to_string()),
+            exchange_kind: exchange,
             lock: RwLock::new(()),
         };
         store.init_defaults();
@@ -55,6 +85,13 @@ impl MemoryStore {
 
     pub fn account_id(&self) -> Option<&str> {
         self.account_id.as_deref()
+    }
+
+    /// The exchange this store is scoped to, if any. `None` for the legacy
+    /// default-account flat layout and for the rare named-account-upgrade
+    /// case where the exchange was not provided.
+    pub fn exchange(&self) -> Option<ExchangeKind> {
+        self.exchange_kind
     }
 
     fn init_defaults(&self) {
@@ -441,7 +478,7 @@ mod tests {
         // an explicit "default" account (e.g. from the loader) does not
         // accidentally create a subdir and orphan the user's files.
         let tmp = "./data/memory_test_default_str";
-        let store = MemoryStore::with_account(tmp, Some("default"));
+        let store = MemoryStore::with_account(tmp, Some("default"), None);
         let legacy = std::path::Path::new(tmp).join("btc-treasury.json");
         assert!(legacy.exists());
         assert_eq!(store.account_id(), Some("default"));
@@ -451,7 +488,7 @@ mod tests {
     #[test]
     fn named_account_uses_subdir() {
         let tmp = "./data/memory_test_named";
-        let store = MemoryStore::with_account(tmp, Some("alpha"));
+        let store = MemoryStore::with_account(tmp, Some("alpha"), None);
         let sub = std::path::Path::new(tmp).join("accounts").join("alpha").join("btc-treasury.json");
         assert!(sub.exists(), "named account must use subdir, expected {}", sub.display());
         // Legacy flat layout must NOT receive the named account's state.
@@ -463,5 +500,66 @@ mod tests {
 
     fn tempfile_or(p: &str) -> String {
         p.to_string()
+    }
+
+    // ── Fase 3: layered (id, exchange) layout tests ──────────────────────────
+
+    #[test]
+    fn named_account_with_exchange_uses_exchange_subdir() {
+        let tmp = "./data/memory_test_named_with_exchange";
+        let store = MemoryStore::with_account(tmp, Some("main"), Some(ExchangeKind::Okx));
+        let layered = std::path::Path::new(tmp)
+            .join("accounts").join("main").join("okx").join("btc-treasury.json");
+        assert!(layered.exists(), "named+exchange must use layered subdir, expected {}", layered.display());
+        // Other layouts must NOT exist
+        let flat = std::path::Path::new(tmp).join("btc-treasury.json");
+        assert!(!flat.exists(), "named+exchange must not write to flat layout");
+        let no_ex = std::path::Path::new(tmp).join("accounts").join("main").join("btc-treasury.json");
+        assert!(!no_ex.exists(), "named+exchange must not write to no-exchange subdir");
+        assert_eq!(store.exchange(), Some(ExchangeKind::Okx));
+        std::fs::remove_dir_all(tmp).ok();
+    }
+
+    #[test]
+    fn default_account_keeps_flat_layout_even_with_exchange() {
+        // BACKWARD COMPAT: Fase 2 users with id=default under EXCHANGE_NAME=both
+        // must keep their flat-layout state at data_dir/btc-treasury.json.
+        // Adding an exchange to a "default" id does NOT escalate to a layered
+        // subdir — that would orphan the user's existing files.
+        let tmp = "./data/memory_test_default_with_exchange";
+        let store = MemoryStore::with_account(tmp, Some("default"), Some(ExchangeKind::Okx));
+        let flat = std::path::Path::new(tmp).join("btc-treasury.json");
+        assert!(flat.exists(), "default+exchange must keep flat layout, expected {}", flat.display());
+        let layered = std::path::Path::new(tmp)
+            .join("accounts").join("default").join("okx").join("btc-treasury.json");
+        assert!(!layered.exists(), "default+exchange must NOT escalate to layered subdir");
+        assert_eq!(store.exchange(), Some(ExchangeKind::Okx));
+        std::fs::remove_dir_all(tmp).ok();
+    }
+
+    #[test]
+    fn two_exchanges_under_one_id_do_not_collide() {
+        let tmp = "./data/memory_test_two_exchanges";
+        let binance = MemoryStore::with_account(tmp, Some("main"), Some(ExchangeKind::Binance));
+        let okx = MemoryStore::with_account(tmp, Some("main"), Some(ExchangeKind::Okx));
+
+        // Write different treasury values to each.
+        let mut s1 = binance.get_treasury_state();
+        s1.current_btc = 0.01234567;
+        binance.save_treasury_state(s1);
+
+        let mut s2 = okx.get_treasury_state();
+        s2.current_btc = 0.00543210;
+        okx.save_treasury_state(s2);
+
+        // Reload each store and confirm independence.
+        let r1 = binance.get_treasury_state();
+        let r2 = okx.get_treasury_state();
+        assert!((r1.current_btc - 0.01234567).abs() < 1e-8,
+            "Binance store BTC should be 0.01234567, got {}", r1.current_btc);
+        assert!((r2.current_btc - 0.00543210).abs() < 1e-8,
+            "OKX store BTC should be 0.00543210, got {}", r2.current_btc);
+
+        std::fs::remove_dir_all(tmp).ok();
     }
 }

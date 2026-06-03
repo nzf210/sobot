@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use teloxide::prelude::*;
 use tokio::sync::RwLock;
-use tokio::time::{interval, Duration};
 
 use crate::account_runtime::AccountRuntime;
+use crate::account_spec::ExchangeKind;
 use crate::engine::AdvisoryEngine;
 use crate::engines::risk_manager::RiskManager;
 use crate::exchange::ExchangeClient;
@@ -14,16 +13,23 @@ use crate::format::{bot_send_plain, escape_mdv2, send_mdv2_safe};
 use crate::indicators::Indicators;
 use crate::memory::MemoryStore;
 use crate::models::*;
+use crate::multi_exchange::AccountKey;
 use crate::position_monitor::record_position_from_advisory;
 use crate::scanner::ScannerState;
 
 // ── Static help / skills text ────────────────────────────────────────────────
-// Binance Spot-focused. Pair names are Binance-style: SYMBOLBTC, ETHBTC, SOLBTC, etc.
+// Multi-exchange-aware (Fase 3). Pair names are BTC-quote style:
+// SYMBOLBTC, ETHBTC, SOLBTC, etc. (no dash). When 1 account is bound
+// to multiple exchanges (Binance + OKX), /btc_use <id> [exchange] lets
+// the operator target a specific exchange.
 
-const HELP_TEXT: &str = r#"🤖 *BTC Treasury Accumulation* — Binance Spot
+const HELP_TEXT: &str = r#"🤖 *BTC Treasury Accumulation*
 
 *Account & Balances*
 /btc_status — Spot balance \(USDT \+ all assets\), open orders
+/btc_accounts — List configured bindings \(id/exchange\)
+/btc_aggregate — Rollup of all bindings' BTC \+ PnL
+/btc_use \<id\> \[exchange\] — Bind this chat to a specific binding
 
 *Market & Analysis*
 /btc_market \[PAIR\] — Live market data \+ OHLCV summary
@@ -34,18 +40,18 @@ const HELP_TEXT: &str = r#"🤖 *BTC Treasury Accumulation* — Binance Spot
 /btc_treasury — BTC holdings, vault, compound balance, trade stats
 /btc_positions — Open positions with TP/SL/trailing
 
-*Pair Management \(Binance BTC‑Quote\)*
+*Pair Management \(BTC‑Quote\)*
 /btc_pairs — List active scanned pairs
 /btc_addpair \<PAIR\> — Add pair \(e\.g\. SOLBTC, ETHBTC, SUIBTC\)
 /btc_removepair \<PAIR\> — Remove pair from scanner
-/btc_discover — Auto\-discover all BTC\-quote pairs on Binance
+/btc_discover — Auto\-discover all BTC\-quote pairs on the bound exchange
 /btc_pairinfo \<PAIR\> — AI scores for one pair
 
 *History & Learning*
 /btc_history — Last 10 decisions
 /btc_lessons — Recent self\-learning lessons
 
-*Trading \(Binance Spot\)*
+*Trading*
 /btc_buy \<SIZE\> \<PAIR\> — Market buy with dynamic TP/SL
 /btc_sell — Close ALL positions at market price
 /btc_close \<index\> — Close position by index \(1\-based\)
@@ -67,9 +73,14 @@ const HELP_TEXT: &str = r#"🤖 *BTC Treasury Accumulation* — Binance Spot
 /btc_skills — Full bot capabilities
 /help — This message
 
-*Pair Format \(Binance BTC‑Quote\)*
+*Pair Format \(BTC‑Quote\)*
 Examples: SOLBTC, ETHBTC, SUIBTC, LINKBTC, DOGEBTC, ADABTC
-Auto\-discover with /btc_discover"#;
+Auto\-discover with /btc_discover
+
+*Multi‑Exchange*
+One account can run on Binance + OKX simultaneously.
+/btc_use main okx  → switch to OKX under the same id
+/btc_status        → renders one block per exchange"#;
 
 const SKILLS_TEXT: &str = r#"*BTC Treasury Accumulation — Skills*
 
@@ -150,14 +161,16 @@ pub struct BtcBot {
     mem: Arc<MemoryStore>,
     exchange: Option<Arc<dyn ExchangeClient>>,
     scanner: Option<Arc<ScannerState>>,
-    /// Per-account runtimes, keyed by `account_id`. The bot looks up
-    /// `active_account[chat_id]` to pick which runtime handles this chat.
-    /// With one `default` account the map has one entry, so legacy behavior
-    /// is preserved automatically.
-    per_account: HashMap<String, Arc<AccountRuntime>>,
-    /// Per-chat active account id. Defaults to `"default"` for chats that
-    /// have not yet called `/btc_use <id>`.
-    active_account: RwLock<HashMap<i64, String>>,
+    /// Per-account runtimes, keyed by `AccountKey = (exchange, account_id)`.
+    /// Fase 3: one account_id can have multiple bindings (Binance + OKX),
+    /// so the key is the composite, not the id alone. With one `default`
+    /// Binance account the map has one entry, so legacy behavior is
+    /// preserved automatically.
+    per_account: HashMap<AccountKey, Arc<AccountRuntime>>,
+    /// Per-chat active `AccountKey`. Defaults to the first map entry
+    /// (Binance-first ordering) for chats that have not yet called
+    /// `/btc_use <id> [exchange]`.
+    active_account: RwLock<HashMap<i64, AccountKey>>,
 }
 
 impl Clone for BtcBot {
@@ -183,7 +196,7 @@ impl BtcBot {
         mem: Arc<MemoryStore>,
         exchange: Option<Arc<dyn ExchangeClient>>,
         scanner: Option<Arc<ScannerState>>,
-        per_account: HashMap<String, Arc<AccountRuntime>>,
+        per_account: HashMap<AccountKey, Arc<AccountRuntime>>,
     ) -> Self {
         Self {
             token,
@@ -198,22 +211,27 @@ impl BtcBot {
     }
 
     /// Resolve the active `AccountRuntime` for a chat. Returns the chat's
-    /// active account if it's still configured, otherwise the single-account
-    /// default, otherwise `None`. The bot uses this to switch its
-    /// `mem`/`exchange` view per-command in multi-account mode.
+    /// active `(id, exchange)` binding, or the first binding in the map
+    /// for chats that haven't called `/btc_use` yet.
     async fn resolve_runtime(&self, chat_id: i64) -> Option<Arc<AccountRuntime>> {
-        // Single-account case: the per_account map has at most one entry and
-        // it must be the default. Skip the lock and return it directly so
-        // legacy chats get the same fast path as before.
-        if self.per_account.len() == 1 {
-            return self.per_account.values().next().cloned();
-        }
         let active = self.active_account.read().await;
-        let id = active
+        let key = active
             .get(&chat_id)
             .cloned()
             .or_else(|| self.per_account.keys().next().cloned());
-        id.and_then(|k| self.per_account.get(&k).cloned())
+        key.and_then(|k| self.per_account.get(&k).cloned())
+    }
+
+    /// Return every runtime sharing the given `account_id`. With one
+    /// binding the vec has one entry; with "1 account, 2 exchanges" it
+    /// has 2. The bot uses this for `/btc_status` to render per-exchange
+    /// blocks when the bound account has multiple bindings.
+    async fn resolve_runtimes_for_id(&self, account_id: &str) -> Vec<Arc<AccountRuntime>> {
+        self.per_account
+            .iter()
+            .filter(|(k, _)| k.account_id == account_id)
+            .map(|(_, rt)| rt.clone())
+            .collect()
     }
 
     // ── lifecycle ──────────────────────────────────────────────────────────
@@ -356,90 +374,28 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_status — Binance Spot balance (USDT + all assets), open orders.
+    /// /btc_status — per-binding balance + treasury snapshot.
+    ///
+    /// With one binding (legacy single-exchange users), renders the
+    /// pre-Fase-3 single block. With multiple bindings under the same
+    /// `id` ("1 account, 2 exchanges"), renders one block per exchange
+    /// plus an aggregate footer.
     async fn cmd_status(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
-        let rt = match self.resolve_runtime(msg.chat.id.0).await {
+        let active_rt = match self.resolve_runtime(msg.chat.id.0).await {
             Some(rt) => rt,
             None => {
-                send_mdv2_safe(bot, msg.chat.id, "Exchange not configured. Set EXCHANGE_API_KEY and EXCHANGE_API_SECRET.").await?;
+                send_mdv2_safe(
+                    bot, msg.chat.id,
+                    "Exchange not configured. Set up accounts.json or EXCHANGE_API_KEY/EXCHANGE_API_SECRET.",
+                ).await?;
                 return Ok(());
             }
         };
-        let exchange = rt.exchange.as_ref();
-        let mem = rt.mem.as_ref();
-        let scanner = rt.scanner_state.as_ref();
-        let text = match exchange.get_balances().await {
-            Ok(balances) => {
-                let stable_bal = balances.iter().find(|b| b.asset == "USDT" || b.asset == "USDC");
-                let stable_free = stable_bal.map(|b| b.free).unwrap_or(0.0);
-                let stable_locked = stable_bal.map(|b| b.locked).unwrap_or(0.0);
-                let stable_asset = if balances.iter().any(|b| b.asset == "USDC") { "USDC" } else { "USDT" };
-
-                let ts = mem.get_treasury_state();
-                let cfg = mem.get_config();
-                let mut lines = vec![
-                    format!("💼 *Account — Binance Spot*"),
-                    format!("Exchange: {}", escape_mdv2(exchange.exchange_name())),
-                    format!("Mode: {}", if cfg.dry_run { "🧪 DRY RUN" } else { "🔴 LIVE" }),
-                    format!("API Key: `{}`", escape_mdv2(&exchange.api_key_display())),
-                    format!("{}: {:.2} free \\| {:.2} locked", stable_asset, stable_free, stable_locked),
-                    format!(""),
-                    format!("🏦 *BTC Treasury*"),
-                    format!("BTC Holdings: {:.8}", ts.current_btc),
-                    format!("BTC Vault: {:.8}", ts.btc_treasury_vault),
-                    format!("Compound: {:.8}", ts.compound_balance),
-                    format!("Trades: {} \\| Win: {} \\| Loss: {}", ts.total_trades, ts.winning_trades, ts.losing_trades),
-                ];
-
-                if !ts.trading_paused_until.is_empty() {
-                    lines.push(format!("⏸️ *Paused Until:* {}", escape_mdv2(&ts.trading_paused_until)));
-                }
-
-                // Show other non-zero balances. BTC is included so the
-                // live Binance Spot BTC balance is visible (the BTC
-                // Treasury block above reads the local ledger value,
-                // which can drift from the exchange until a position
-                // closes — the exchange value is the source of truth).
-                let other: Vec<_> = balances.iter()
-                    .filter(|b| b.asset != "USDT" && b.asset != "USDC")
-                    .filter(|b| b.free > 0.0 || b.locked > 0.0)
-                    .collect();
-                if !other.is_empty() {
-                    lines.push(String::new());
-                    lines.push("*Other Assets:*".to_string());
-                    for b in other {
-                        lines.push(format!("{}: {:.8} free \\| {:.8} locked", escape_mdv2(&b.asset), b.free, b.locked));
-                    }
-                }
-
-                // Open orders
-                let pairs = scanner.get_pairs().await;
-                let mut all_orders: Vec<BtcAdvisoryPosition> = Vec::new();
-                for pair in &pairs {
-                    if let Ok(orders) = exchange.get_open_orders(pair).await {
-                        all_orders.extend(orders);
-                    }
-                }
-                if !all_orders.is_empty() {
-                    lines.push(String::new());
-                    lines.push("*Open Orders:*".to_string());
-                    for o in &all_orders {
-                        lines.push(format!(
-                            "{} {}: {} @ {} \\| TP: {:.1}% \\| SL: {:.1}%",
-                            escape_mdv2(&o.side),
-                            escape_mdv2(&o.id),
-                            o.size,
-                            o.entry_price,
-                            o.take_profit_pct,
-                            o.stop_loss_pct,
-                        ));
-                    }
-                }
-
-                lines.join("\n")
-            }
-            Err(e) => format!("Failed: {}", e),
-        };
+        // Render all bindings under the bound id. With one binding this
+        // is just the single block; with multiple it's one block per
+        // exchange followed by a small aggregate footer.
+        let runtimes = self.resolve_runtimes_for_id(&active_rt.account_id).await;
+        let text = render_status(&runtimes).await;
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
@@ -459,8 +415,9 @@ impl BtcBot {
         let text = match exchange.get_market_data(&pair).await {
             Ok(data) => {
                 format!(
-                    "*{} — Binance Spot*\nRegime: {}\nTrend: {:.1}\nVolume: {:.1}/10\nLiquidity: {:.1}/10\nSpread: {:.1}/10\nVolatility: {:.1}/10\nConfidence: {:.2}",
+                    "*{} — {}*\nRegime: {}\nTrend: {:.1}\nVolume: {:.1}/10\nLiquidity: {:.1}/10\nSpread: {:.1}/10\nVolatility: {:.1}/10\nConfidence: {:.2}",
                     escape_mdv2(&pair),
+                    escape_mdv2(exchange.exchange_name()),
                     escape_mdv2(&data.market_regime),
                     data.trend_strength,
                     data.volume_score,
@@ -556,7 +513,7 @@ impl BtcBot {
             0.0
         };
         let text = format!(
-            "🏦 *BTC Treasury — Binance Spot*\n\n\
+            "🏦 *BTC Treasury — [{} / {}]*\n\n\
             BTC Holdings: {:.8}\n\
             BTC Vault: {:.8} ⚠️ *never traded*\n\
             Compound: {:.8}\n\n\
@@ -573,6 +530,8 @@ impl BtcBot {
             TP: {:.1}% \\| SL: {:.1}%\n\
             AI Threshold: {:.0}\n\n\
             Last Update: {}",
+            escape_mdv2(&rt.account_id),
+            rt.spec.exchange.as_str(),
             ts.current_btc,
             ts.btc_treasury_vault,
             ts.compound_balance,
@@ -609,7 +568,7 @@ impl BtcBot {
             return Ok(());
         }
 
-        let mut lines = vec!["📊 *Open Positions — Binance Spot*\n".into()];
+        let mut lines = vec![format!("📊 *Open Positions — [{} / {}]*\n", rt.account_id, rt.spec.exchange.as_str())];
         for (i, p) in positions.iter().enumerate() {
             let trailing_icon = if p.use_trailing { "🏃" } else { "—" };
             lines.push(format!(
@@ -881,13 +840,14 @@ impl BtcBot {
         ];
         let text = format!(
             "*Auto-discover BTC-Quote Pairs*\n\n\
-            Binance Spot has ~50 BTC-quote pairs.\n\
+            {} has ~50 BTC-quote pairs.\n\
             Use /btc_addpair to add them one by one:\n\n\
             /btc_addpair ETHBTC\n\
             /btc_addpair SOLBTC\n\
             /btc_addpair SUIBTC\n\
             ...etc\n\n\
             Popular pairs:\n{}",
+            escape_mdv2(exchange.exchange_name()),
             common_pairs.iter()
                 .map(|p| format!("  • {}", p))
                 .collect::<Vec<_>>()
@@ -982,7 +942,7 @@ impl BtcBot {
         }
 
         let recent: Vec<_> = decisions.iter().rev().take(10).collect();
-        let mut lines = vec!["*Recent Decisions — Binance Spot*\n".into()];
+        let mut lines = vec![format!("*Recent Decisions — [{} / {}]*\n", escape_mdv2(&rt.account_id), rt.spec.exchange.as_str())];
 
         for (i, d) in recent.iter().enumerate() {
             let icon = match d.advisory.recommendation.as_str() {
@@ -1075,9 +1035,9 @@ impl BtcBot {
             0.0
         };
         let text = format!(
-            "⚙️ *Config — BTC Treasury Accumulation*\n\n\
+            "⚙️ *Config — BTC Treasury Accumulation [{} / {}]*\n\n\
             *Trading*\n\
-            Exchange: Binance Spot\n\
+            Exchange: {}\n\
             Mode: {}\n\
             Initial Capital: ${:.2}\n\
             Max Positions: {}\n\
@@ -1101,6 +1061,9 @@ impl BtcBot {
             Pairs: {}\n\
             Win Rate: {:.1}%\n\
             Paused Until: {}",
+            escape_mdv2(&rt.account_id),
+            rt.spec.exchange.as_str(),
+            escape_mdv2(rt.exchange.exchange_name()),
             if cfg.dry_run { "🧪 DRY RUN" } else { "🔴 LIVE" },
             cfg.initial_capital_usdt,
             cfg.max_positions,
@@ -1400,7 +1363,7 @@ impl BtcBot {
             }
         };
 
-        let _ = bot_send_plain(bot, msg, &format!("📈 Placing BUY order on Binance Spot...\n{} {} @ market price...", size, pair)).await;
+        let _ = bot_send_plain(bot, msg, &format!("📈 Placing BUY order on {}...\n{} {} @ market price...", exchange.exchange_name(), size, pair)).await;
 
         let cfg = mem.get_config();
         let ts = mem.get_treasury_state();
@@ -1508,7 +1471,7 @@ impl BtcBot {
         match buy_result {
             Ok(result) => {
                 let text = format!(
-                    "✅ *Order Placed — Binance Spot*\n\
+                    "✅ *Order Placed — {}*\n\
                     Pair: {}\n\
                     Side: BUY\n\
                     Size: {}\n\
@@ -1517,6 +1480,7 @@ impl BtcBot {
                     *Dynamic TP/SL from LLM:*\n\
                     Take Profit: {:.1}% — {}\n\
                     Stop Loss: {:.1}% — {}",
+                    exchange.exchange_name(),
                     pair,
                     size,
                     result.order_id,
@@ -1647,7 +1611,7 @@ impl BtcBot {
         // Remove all closed positions
         mem.save_positions(&[]);
 
-        let text = format!("*Close Results — Binance Spot*\n\n{}", results.join("\n"));
+        let text = format!("*Close Results — {}*\n\n{}", exchange.exchange_name(), results.join("\n"));
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
@@ -1829,7 +1793,7 @@ impl BtcBot {
             }
         }
         mem.save_positions(&[]);
-        let text = format!("*Force Close All — Binance Spot*\n\n{}", results.join("\n"));
+        let text = format!("*Force Close All — {}*\n\n{}", exchange.exchange_name(), results.join("\n"));
         send_mdv2_safe(bot, msg.chat.id, &text).await?;
         Ok(())
     }
@@ -1859,13 +1823,19 @@ impl BtcBot {
                 let mut cfg = mem.get_config();
                 cfg.dry_run = true;
                 mem.save_config(&cfg);
-                send_mdv2_safe(bot, msg.chat.id, "🧪 *DRY RUN enabled*\nAll trades will be simulated. No real orders on Binance.").await?;
+                send_mdv2_safe(
+                    bot, msg.chat.id,
+                    &format!("🧪 *DRY RUN enabled*\nAll trades will be simulated. No real orders on {}.", rt.exchange.exchange_name()),
+                ).await?;
             }
             "off" => {
                 let mut cfg = mem.get_config();
                 cfg.dry_run = false;
                 mem.save_config(&cfg);
-                send_mdv2_safe(bot, msg.chat.id, "🔴 *LIVE TRADING enabled*\n⚠️ All orders WILL execute on Binance Spot!").await?;
+                send_mdv2_safe(
+                    bot, msg.chat.id,
+                    &format!("🔴 *LIVE TRADING enabled*\n⚠️ All orders WILL execute on {}!", rt.exchange.exchange_name()),
+                ).await?;
             }
             _ => {
                 bot_send_plain(bot, msg, &format!("Invalid: '{}'. Use 'on' or 'off'.\n\n/btc_dryrun on  — simulation\n/btc_dryrun off — live trading", arg)).await?;
@@ -1912,24 +1882,97 @@ impl BtcBot {
         Ok(())
     }
 
-    /// /btc_use <id> — set this chat's active account. With one `default`
-    /// account configured the command is a no-op (returns the same account).
+    /// /btc_use <id> [exchange] — set this chat's active binding. With one
+    /// `default` account configured the command picks the first binding
+    /// (Binance-first by config-file ordering). With "1 account, 2
+    /// exchanges", the user can target a specific exchange:
+    ///   /btc_use main           → first binding under id=main (Binance)
+    ///   /btc_use main okx       → the (Okx, "main") binding
     async fn cmd_use(&self, bot: &Bot, msg: &Message, args: Option<String>) -> Result<(), teloxide::RequestError> {
-        let id = match args {
-            Some(ref s) if !s.trim().is_empty() => s.trim().to_string(),
+        let raw = args.unwrap_or_default();
+        let parts: Vec<String> = raw
+            .split_whitespace()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let (id, exchange_arg) = match parts.as_slice() {
+            [] => {
+                bot_send_plain(
+                    bot, msg,
+                    "Usage:\n  /btc_use <account_id>             — bind to first exchange under id\n  /btc_use <account_id> <exchange>   — bind to specific exchange (binance | okx)\n\nUse /btc_accounts to list configured bindings.",
+                ).await?;
+                return Ok(());
+            }
+            [id] => (id.clone(), None),
+            [id, ex] => (id.clone(), Some(ex.to_lowercase())),
             _ => {
-                bot_send_plain(bot, msg, "Usage: /btc_use <account_id>\nUse /btc_accounts to list configured accounts.").await?;
+                bot_send_plain(
+                    bot, msg,
+                    "Too many arguments.\nUsage: /btc_use <account_id> [exchange]\nExamples:\n  /btc_use main\n  /btc_use main okx",
+                ).await?;
                 return Ok(());
             }
         };
-        if !self.per_account.contains_key(&id) {
-            let available: Vec<String> = self.per_account.keys().cloned().collect();
-            bot_send_plain(bot, msg, &format!("Account '{}' not configured. Available: {}", id, available.join(", "))).await?;
-            return Ok(());
-        }
+
+        // Resolve the target AccountKey.
+        let key = if let Some(ex_str) = exchange_arg.as_deref() {
+            let exchange = match ExchangeKind::from_str(ex_str) {
+                Some(e) => e,
+                None => {
+                    let available: Vec<String> = self
+                        .per_account
+                        .keys()
+                        .map(|k| k.exchange.as_str().to_string())
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .into_iter()
+                        .collect();
+                    bot_send_plain(
+                        bot, msg,
+                        &format!("Unknown exchange '{}'. Available: {}", ex_str, available.join(", ")),
+                    ).await?;
+                    return Ok(());
+                }
+            };
+            let key = AccountKey { exchange, account_id: id.clone() };
+            if !self.per_account.contains_key(&key) {
+                let bindings: Vec<String> = self.per_account.keys()
+                    .filter(|k| k.account_id == id)
+                    .map(|k| k.exchange.as_str().to_string())
+                    .collect();
+                bot_send_plain(
+                    bot, msg,
+                    &format!("No binding for '{}/{}'. Available under '{}': [{}]",
+                             id, ex_str, id, bindings.join(", ")),
+                ).await?;
+                return Ok(());
+            }
+            key
+        } else {
+            // Pick the first binding under the id (insertion order — Binance-first
+            // by config-file convention).
+            match self.per_account.keys().find(|k| k.account_id == id).cloned() {
+                Some(k) => k,
+                None => {
+                    let available: Vec<String> = self.per_account.keys()
+                        .map(|k| format!("{}/{}", k.account_id, k.exchange.as_str()))
+                        .collect();
+                    bot_send_plain(
+                        bot, msg,
+                        &format!("Account '{}' not configured. Available: {}",
+                                 id, available.join(", ")),
+                    ).await?;
+                    return Ok(());
+                }
+            }
+        };
+
         let mut active = self.active_account.write().await;
-        active.insert(msg.chat.id.0, id.clone());
-        bot_send_plain(bot, msg, &format!("✅ Active account for this chat: *{}*", escape_mdv2(&id))).await?;
+        active.insert(msg.chat.id.0, key.clone());
+        bot_send_plain(
+            bot, msg,
+            &format!("✅ Active binding for this chat: *{}* on *{}*",
+                     escape_mdv2(&key.account_id), key.exchange.as_str()),
+        ).await?;
         Ok(())
     }
 
@@ -1938,44 +1981,63 @@ impl BtcBot {
     /// one row and the chat is auto-bound to it.
     async fn cmd_accounts(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         if self.per_account.is_empty() {
-            send_mdv2_safe(bot, msg.chat.id, "No accounts configured. Set BINANCE_API_KEY to enable the default account.").await?;
+            send_mdv2_safe(
+                bot, msg.chat.id,
+                "No accounts configured. Set up accounts.json or BINANCE_API_KEY/EXCHANGE_API_SECRET.",
+            ).await?;
             return Ok(());
         }
         let active = self.active_account.read().await;
         let current = active.get(&msg.chat.id.0).cloned()
             .or_else(|| self.per_account.keys().next().cloned())
-            .unwrap_or_default();
-        let mut lines: Vec<String> = vec![format!("📋 *Accounts* ({})\n", self.per_account.len())];
-        for (id, rt) in &self.per_account {
-            let marker = if id == &current { "▶️" } else { "  " };
+            .unwrap_or_else(|| AccountKey {
+                exchange: ExchangeKind::Binance,
+                account_id: String::new(),
+            });
+        // Header: how many distinct (id, exchange) bindings exist.
+        let distinct_ids: std::collections::HashSet<String> =
+            self.per_account.keys().map(|k| k.account_id.clone()).collect();
+        let mut lines: Vec<String> = vec![format!(
+            "📋 *Bindings* ({} binding(s) across {} account(s))\n",
+            self.per_account.len(), distinct_ids.len()
+        )];
+        for (key, rt) in &self.per_account {
+            let is_active = *key == current;
+            let marker = if is_active { "▶️" } else { "  " };
             let api = rt.exchange.api_key_display();
             let balance = match rt.exchange.get_balances().await {
                 Ok(b) => b,
                 Err(e) => {
-                    lines.push(format!("{} *{}* — `{}` (balance fetch failed: {})", marker, escape_mdv2(id), escape_mdv2(&api), e));
+                    lines.push(format!(
+                        "{} *{}/{}* — `{}` (balance fetch failed: {})",
+                        marker, escape_mdv2(&key.account_id), key.exchange.as_str(),
+                        escape_mdv2(&api), e
+                    ));
                     continue;
                 }
             };
             let btc = balance.iter().find(|b| b.asset == "BTC").map(|b| b.free + b.locked).unwrap_or(0.0);
             let usdt = balance.iter().find(|b| b.asset == "USDT" || b.asset == "USDC").map(|b| b.free + b.locked).unwrap_or(0.0);
             lines.push(format!(
-                "{} *{}* — `{}`\n     BTC: {:.8} | USDT: {:.2}",
+                "{} *{}/{}* — `{}`\n     BTC: {:.8} | USDT: {:.2}",
                 marker,
-                escape_mdv2(id),
+                escape_mdv2(&key.account_id), key.exchange.as_str(),
                 escape_mdv2(&api),
-                btc,
-                usdt
+                btc, usdt
             ));
         }
         lines.push(String::new());
-        lines.push(format!("Active: *{}*\nUse /btc_use <id> to switch.", escape_mdv2(&current)));
+        lines.push(format!(
+            "Active: *{}/{}*\nUse /btc_use <id> [exchange] to switch.",
+            escape_mdv2(&current.account_id), current.exchange.as_str()
+        ));
         send_mdv2_safe(bot, msg.chat.id, &lines.join("\n")).await?;
         Ok(())
     }
 
-    /// /btc_aggregate — rollup of all accounts' BTC + PnL. Per-account line
+    /// /btc_aggregate — rollup of all bindings' BTC + PnL. Per-binding line
     /// + grand total. Pulls from each `AccountRuntime`'s `MemoryStore`
-    /// (per-account state, no cross-account bleed).
+    /// (per-binding state, no cross-binding bleed).
     async fn cmd_aggregate(&self, bot: &Bot, msg: &Message) -> Result<(), teloxide::RequestError> {
         if self.per_account.is_empty() {
             send_mdv2_safe(bot, msg.chat.id, "No accounts configured").await?;
@@ -1986,8 +2048,8 @@ impl BtcBot {
         let mut total_compound = 0.0;
         let mut total_trades: u64 = 0;
         let mut total_wins: u64 = 0;
-        let mut lines: Vec<String> = vec!["📊 *Aggregate — All Accounts*\n".into()];
-        for (id, rt) in &self.per_account {
+        let mut lines: Vec<String> = vec!["📊 *Aggregate — All Bindings*\n".into()];
+        for (key, rt) in &self.per_account {
             let ts = rt.mem.get_treasury_state();
             total_btc += ts.current_btc;
             total_vault += ts.btc_treasury_vault;
@@ -1998,8 +2060,8 @@ impl BtcBot {
                 ts.winning_trades as f64 / ts.total_trades as f64 * 100.0
             } else { 0.0 };
             lines.push(format!(
-                "*{}*: BTC {:.8} | Vault {:.8} | Trades {} (win {:.0}%)",
-                escape_mdv2(id),
+                "*{}/{}*: BTC {:.8} | Vault {:.8} | Trades {} (win {:.0}%)",
+                escape_mdv2(&key.account_id), key.exchange.as_str(),
                 ts.current_btc,
                 ts.btc_treasury_vault,
                 ts.total_trades,
@@ -2018,6 +2080,145 @@ impl BtcBot {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Render the `/btc_status` response. With one binding (single-exchange
+/// user) the output is byte-identical to pre-Fase-3. With multiple
+/// bindings under the same id ("1 account, 2 exchanges"), each binding
+/// gets a labelled block plus an aggregate footer.
+async fn render_status(runtimes: &[Arc<AccountRuntime>]) -> String {
+    if runtimes.is_empty() {
+        return "No exchange configured".to_string();
+    }
+    let multi = runtimes.len() > 1;
+    let mut blocks: Vec<String> = Vec::new();
+    let mut agg_btc = 0.0_f64;
+    let mut agg_vault = 0.0_f64;
+    let mut agg_compound = 0.0_f64;
+    let mut agg_trades: u64 = 0;
+    let mut agg_wins: u64 = 0;
+
+    for rt in runtimes {
+        let exchange = rt.exchange.as_ref();
+        let mem = rt.mem.as_ref();
+        let scanner = rt.scanner_state.as_ref();
+        match exchange.get_balances().await {
+            Ok(balances) => {
+                let stable_bal = balances.iter().find(|b| b.asset == "USDT" || b.asset == "USDC");
+                let stable_free = stable_bal.map(|b| b.free).unwrap_or(0.0);
+                let stable_locked = stable_bal.map(|b| b.locked).unwrap_or(0.0);
+                let stable_asset = if balances.iter().any(|b| b.asset == "USDC") { "USDC" } else { "USDT" };
+                let ts = mem.get_treasury_state();
+                let cfg = mem.get_config();
+                agg_btc += ts.current_btc;
+                agg_vault += ts.btc_treasury_vault;
+                agg_compound += ts.compound_balance;
+                agg_trades += ts.total_trades as u64;
+                agg_wins += ts.winning_trades as u64;
+
+                let header = if multi {
+                    format!("💼 *Account — [{}/{}]*", escape_mdv2(&rt.account_id), rt.spec.exchange.as_str())
+                } else {
+                    format!("💼 *Account — {}*", escape_mdv2(exchange.exchange_name()))
+                };
+
+                // Fase 4: heartbeat + restart health line
+                let heartbeat_line = {
+                    let hb = rt.status.heartbeat_unix();
+                    let restarts = rt.status.restarts();
+                    if hb == 0 {
+                        "Health: ⚠️ No heartbeat yet".to_string()
+                    } else {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+                        let age_secs = (now - hb).max(0);
+                        let restart_txt = if restarts > 0 {
+                            format!(" \\| ⚠️ Restarts: {}", restarts)
+                        } else {
+                            String::new()
+                        };
+                        format!("Health: ✅ Last tick {}s ago{}", age_secs, restart_txt)
+                    }
+                };
+
+                let mut lines = vec![
+                    header,
+                    format!("Exchange: {}", escape_mdv2(exchange.exchange_name())),
+                    format!("Mode: {}", if cfg.dry_run { "🧪 DRY RUN" } else { "🔴 LIVE" }),
+                    format!("API Key: `{}`", escape_mdv2(&exchange.api_key_display())),
+                    heartbeat_line,
+                    format!("{}: {:.2} free \\| {:.2} locked", stable_asset, stable_free, stable_locked),
+                    String::new(),
+                    "🏦 *BTC Treasury*".to_string(),
+                    format!("BTC Holdings: {:.8}", ts.current_btc),
+                    format!("BTC Vault: {:.8}", ts.btc_treasury_vault),
+                    format!("Compound: {:.8}", ts.compound_balance),
+                    format!("Trades: {} \\| Win: {} \\| Loss: {}", ts.total_trades, ts.winning_trades, ts.losing_trades),
+                ];
+
+                if !ts.trading_paused_until.is_empty() {
+                    lines.push(format!("⏸️ *Paused Until:* {}", escape_mdv2(&ts.trading_paused_until)));
+                }
+
+                // Other assets (non-stable).
+                let other: Vec<_> = balances.iter()
+                    .filter(|b| b.asset != "USDT" && b.asset != "USDC")
+                    .filter(|b| b.free > 0.0 || b.locked > 0.0)
+                    .collect();
+                if !other.is_empty() {
+                    lines.push(String::new());
+                    lines.push("*Other Assets:*".to_string());
+                    for b in other {
+                        lines.push(format!("{}: {:.8} free \\| {:.8} locked", escape_mdv2(&b.asset), b.free, b.locked));
+                    }
+                }
+
+                // Open orders.
+                let pairs = scanner.get_pairs().await;
+                let mut all_orders: Vec<BtcAdvisoryPosition> = Vec::new();
+                for pair in &pairs {
+                    if let Ok(orders) = exchange.get_open_orders(pair).await {
+                        all_orders.extend(orders);
+                    }
+                }
+                if !all_orders.is_empty() {
+                    lines.push(String::new());
+                    lines.push("*Open Orders:*".to_string());
+                    for o in &all_orders {
+                        lines.push(format!(
+                            "{} {}: {} @ {} \\| TP: {:.1}% \\| SL: {:.1}%",
+                            escape_mdv2(&o.side),
+                            escape_mdv2(&o.id),
+                            o.size,
+                            o.entry_price,
+                            o.take_profit_pct,
+                            o.stop_loss_pct,
+                        ));
+                    }
+                }
+
+                blocks.push(lines.join("\n"));
+            }
+            Err(e) => {
+                blocks.push(format!("💼 *[{}/{}]* — balance fetch failed: {}",
+                                    escape_mdv2(&rt.account_id), rt.spec.exchange.as_str(), e));
+            }
+        }
+    }
+
+    if multi {
+        let overall_wr = if agg_trades > 0 { agg_wins as f64 / agg_trades as f64 * 100.0 } else { 0.0 };
+        let footer = format!(
+            "\n──────────\n*Aggregate — [{}]*\nBTC: {:.8} \\| Vault: {:.8} \\| Trades: {} (win {:.0}%)",
+            escape_mdv2(&runtimes[0].account_id),
+            agg_btc, agg_vault, agg_trades, overall_wr
+        );
+        blocks.push(footer);
+    }
+
+    blocks.join("\n\n")
+}
 
 /// Compute the BTC price to pass to `update_treasury_on_close` for a given pair.
 /// For BTC-quote pairs (SOLBTC, ETHBTC) PnL is already in BTC, so we pass 1.0
