@@ -1,15 +1,15 @@
 {
   "accounts": [
     {
-      "id": "account_a",
-      "label": "Akun A — BTC Price Tracker",
+      "id": "nzf",
+      "label": "Syahril",
       "telegram_chat_ids": [339959699],
       "exchanges": [
         {
           "kind": "binance",
-          "api_key": "ISI_API_KEY_BINANCE_AKUN_A_DISINI",
-          "api_secret": "ISI_API_SECRET_BINANCE_AKUN_A_DISINI",
-          "scanner_pairs": ["BTCUSDT"],
+          "api_key": "2QFmfkeA97sx53uht0ir3B2IwtKwOdT66gwmvKvJHX9Cw70SxQkBWP3tkN7DEK7K",
+          "api_secret": "fJQ0UK4RP7rAScVOgP5pP2Vn8WbRZpbPXr46EZu4kgq58Mt1uFWBJpkRQA2GRGZK",
+          "scanner_pairs": ["BTCUSDT,ETHBTC,SOLBTC"],
           "enabled": true
         },
         {
@@ -23,7 +23,7 @@
       ]
     },
     {
-      "id": "account_b",
+      "id": "af",
       "label": "Akun B — Alt/BTC Pairs",
       "telegram_chat_ids": [986800131],
       "exchanges": [
