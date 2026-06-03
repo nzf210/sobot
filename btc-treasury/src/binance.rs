@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -270,11 +271,7 @@ impl BinanceClient {
     }
 
     pub fn api_key_display(&self) -> String {
-        if self.api_key.len() > 8 {
-            format!("{}...{}", &self.api_key[..4], &self.api_key[self.api_key.len()-4..])
-        } else {
-            "***".to_string()
-        }
+        crate::util::mask_secret(&self.api_key)
     }
 
     pub async fn get_account(&self) -> Result<BinanceAccount> {

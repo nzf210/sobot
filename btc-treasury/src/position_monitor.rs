@@ -3,7 +3,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::time::{interval, Duration};
 
-use crate::engine::AdvisoryEngine;
 use crate::exchange::ExchangeClient;
 use crate::memory::MemoryStore;
 use crate::models::*;
@@ -12,18 +11,18 @@ use crate::models::*;
 pub struct PositionMonitor {
     mem: Arc<MemoryStore>,
     exchange: Option<Arc<dyn ExchangeClient>>,
-    engine: Arc<AdvisoryEngine>,
     /// Human-readable `exchange/account_id` label for log spans.
     label: String,
+    status: Option<Arc<crate::account_runtime::AccountStatus>>,
 }
 
 impl PositionMonitor {
     pub fn new(
         mem: Arc<MemoryStore>,
         exchange: Option<Arc<dyn ExchangeClient>>,
-        engine: Arc<AdvisoryEngine>,
+        status: Option<Arc<crate::account_runtime::AccountStatus>>,
     ) -> Self {
-        Self { mem, exchange, engine, label: String::new() }
+        Self { mem, exchange, label: String::new(), status }
     }
 
     /// Attach a `"exchange/account_id"` label used in log spans.
@@ -39,6 +38,12 @@ impl PositionMonitor {
 
         loop {
             tick.tick().await;
+            if let Some(ref status) = self.status {
+                if !status.is_enabled() {
+                    tracing::debug!(label = %self.label, "Position monitor is disabled/paused, skipping tick");
+                    continue;
+                }
+            }
             self.check_positions().await;
         }
     }

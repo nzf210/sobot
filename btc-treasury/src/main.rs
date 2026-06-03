@@ -83,7 +83,14 @@ async fn main() -> std::io::Result<()> {
             );
             continue;
         };
-        let rt = Arc::new(AccountRuntime::build(spec, exchange, &cfg.data_dir));
+        let rt = Arc::new(AccountRuntime::build(
+            spec,
+            exchange,
+            &cfg.data_dir,
+            &cfg.llm_url,
+            &cfg.llm_model,
+            &cfg.llm_api_key,
+        ));
 
         // Sync initial balances for THIS runtime. With multiple exchanges
         // under one id, each runtime syncs against its own exchange so the
@@ -118,7 +125,7 @@ async fn main() -> std::io::Result<()> {
 
         {
             let exchange = Arc::clone(&rt.exchange);
-            let engine_c = Arc::clone(&shared.engine);
+            let engine_c = Arc::clone(&rt.engine);
             let mem_c = rt.mem.clone();
             let interval_c = cfg.scanner_interval_secs;
             let scanner_c = Arc::clone(&rt.scanner_state);
@@ -174,11 +181,10 @@ async fn main() -> std::io::Result<()> {
             });
         }
         {
-            let engine_m = Arc::clone(&shared.engine);
             let status_m = Arc::clone(&rt.status);
             let account_id_m = spec.id.clone();
             let exchange_name_m = spec.exchange.as_str().to_string();
-            let monitor = rt.build_monitor(engine_m);
+            let monitor = rt.build_monitor();
             tokio::spawn(async move {
                 let mut backoff_secs: u64 = 5;
                 loop {
@@ -277,7 +283,7 @@ async fn main() -> std::io::Result<()> {
             shared.mem.clone(),
             dispatcher.default(),
             scanner_state_for_bot.clone(),
-            per_account,
+            per_account.clone(),
         ));
         tracing::info!("BTC Telegram bot starting...");
         tokio::spawn(async move {

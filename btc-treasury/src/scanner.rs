@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -212,6 +213,11 @@ pub async fn run(
 
     loop {
         tick.tick().await;
+        if !status.is_enabled() {
+            status.touch();
+            tracing::debug!(exchange = %exname, "Scanner is disabled/paused, skipping tick");
+            continue;
+        }
         // Touch heartbeat — supervisor + /btc/accounts can see this runtime is alive.
         status.touch();
 
@@ -272,7 +278,7 @@ async fn scan_pair(
         tracing::debug!("Scanner [{}]: dry_run mode active", pair);
     }
 
-    let stored_positions = mem.get_positions();
+    let _stored_positions = mem.get_positions();
     let loss_streak = treasury.consecutive_losses;
 
     // Fetch OHLCV and compute AI technical scoring for better advisory

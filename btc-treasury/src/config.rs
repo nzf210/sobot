@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::sanitize;
 
 /// Runtime configuration loaded from `.env` (Fase 3).

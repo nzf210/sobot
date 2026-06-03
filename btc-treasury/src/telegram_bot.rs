@@ -508,7 +508,7 @@ impl BtcBot {
         let ts = mem.get_treasury_state();
         let cfg = mem.get_config();
         let win_rate = if ts.total_trades > 0 {
-            (ts.winning_trades as f64 / ts.total_trades as f64 * 100.0)
+            ts.winning_trades as f64 / ts.total_trades as f64 * 100.0
         } else {
             0.0
         };
@@ -1030,7 +1030,7 @@ impl BtcBot {
         let cfg = mem.get_config();
         let ts = mem.get_treasury_state();
         let win_rate = if ts.total_trades > 0 {
-            (ts.winning_trades as f64 / ts.total_trades as f64 * 100.0)
+            ts.winning_trades as f64 / ts.total_trades as f64 * 100.0
         } else {
             0.0
         };
@@ -1628,7 +1628,7 @@ impl BtcBot {
         let exchange = rt.exchange.as_ref();
         let mem = rt.mem.as_ref();
 
-        let cfg = mem.get_config();
+        let _cfg = mem.get_config();
         let ts = mem.get_treasury_state();
 
         // Check trading pause
@@ -1728,7 +1728,7 @@ impl BtcBot {
         let exchange = rt.exchange.as_ref();
         let mem = rt.mem.as_ref();
 
-        let cfg = mem.get_config();
+        let _cfg = mem.get_config();
         let ts = mem.get_treasury_state();
 
         // Check trading pause
@@ -2210,9 +2210,9 @@ async fn render_status(runtimes: &[Arc<AccountRuntime>]) -> String {
     if multi {
         let overall_wr = if agg_trades > 0 { agg_wins as f64 / agg_trades as f64 * 100.0 } else { 0.0 };
         let footer = format!(
-            "\n──────────\n*Aggregate — [{}]*\nBTC: {:.8} \\| Vault: {:.8} \\| Trades: {} (win {:.0}%)",
+            "\n──────────\n*Aggregate — [{}]*\nBTC: {:.8} \\| Vault: {:.8} \\| Compound: {:.8} \\| Trades: {} (win {:.0}%)",
             escape_mdv2(&runtimes[0].account_id),
-            agg_btc, agg_vault, agg_trades, overall_wr
+            agg_btc, agg_vault, agg_compound, agg_trades, overall_wr
         );
         blocks.push(footer);
     }

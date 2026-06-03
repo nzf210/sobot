@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Multi-account & multi-CEX account specifications (Fase 0-3).
 //!
 //! Fase 0 introduces the data model and loader only — no runtime behavior
@@ -228,7 +229,7 @@ pub fn load_account_specs(
                     if path.is_file() {
                         if let Ok(s) = std::fs::read_to_string(&path) {
                             match load_account_specs_from_json(&s) {
-                                Ok(mut specs) => {
+                                Ok(specs) => {
                                     // If the per-account file declares its id
                                     // as "default" it's a flat-layout user; we
                                     // still want their specs loaded as-is.

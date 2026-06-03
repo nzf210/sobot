@@ -17,7 +17,7 @@
 //! `GET /btc/accounts` HTTP endpoint in `server.rs`.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU32, AtomicBool, Ordering};
 
 use crate::account_spec::AccountSpec;
 use crate::exchange::ExchangeClient;
@@ -41,14 +41,25 @@ pub struct AccountStatus {
     pub last_heartbeat_unix: AtomicI64,
     /// Number of times the supervisor has restarted this account's tasks.
     pub restart_count: AtomicU32,
+    /// Whether the scanner and position monitor are active.
+    pub enabled: AtomicBool,
 }
 
 impl AccountStatus {
-    pub fn new() -> Self {
+    pub fn new(enabled: bool) -> Self {
         Self {
             last_heartbeat_unix: AtomicI64::new(0),
             restart_count: AtomicU32::new(0),
+            enabled: AtomicBool::new(enabled),
         }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn set_enabled(&self, enabled: bool) {
+        self.enabled.store(enabled, Ordering::Relaxed);
     }
 
     /// Record a heartbeat — call from the scanner loop each tick.
@@ -83,6 +94,7 @@ pub struct AccountRuntime {
     pub mem: Arc<MemoryStore>,
     pub scanner_state: Arc<ScannerState>,
     pub executor: Arc<ExecutionEngine>,
+    pub engine: Arc<crate::engine::AdvisoryEngine>,
     /// Live health counters — updated by the supervisor, read by HTTP/Telegram.
     pub status: Arc<AccountStatus>,
 }
@@ -101,6 +113,9 @@ impl AccountRuntime {
         spec: &AccountSpec,
         exchange: Arc<dyn ExchangeClient>,
         data_dir: &str,
+        llm_url: &str,
+        llm_model: &str,
+        llm_api_key: &str,
     ) -> Self {
         // Pass `Some(spec.exchange)` so MemoryStore knows which (id, exchange)
         // this runtime belongs to. The default-account flat-layout special
@@ -113,6 +128,12 @@ impl AccountRuntime {
         ));
         let scanner_state = Arc::new(ScannerState::new());
         let executor = Arc::new(ExecutionEngine::new(Some(Arc::clone(&exchange)), mem.clone()));
+        let engine = Arc::new(crate::engine::AdvisoryEngine::new(
+            llm_url.to_string(),
+            llm_model.to_string(),
+            llm_api_key.to_string(),
+            mem.clone(),
+        ));
 
         // Initialize scanner pairs from the account spec. The spec's
         // `scanner_pairs` is the authoritative list for this account
@@ -133,7 +154,7 @@ impl AccountRuntime {
         }
 
         let key = AccountKey::from_spec(spec);
-        let status = Arc::new(AccountStatus::new());
+        let status = Arc::new(AccountStatus::new(spec.enabled));
         Self {
             key,
             spec: spec.clone(),
@@ -142,17 +163,18 @@ impl AccountRuntime {
             mem,
             scanner_state,
             executor,
+            engine,
             status,
         }
     }
 
     /// Build a position monitor for this account. Caller spawns it.
-    pub fn build_monitor(&self, engine: Arc<crate::engine::AdvisoryEngine>) -> Arc<PositionMonitor> {
+    pub fn build_monitor(&self) -> Arc<PositionMonitor> {
         let label = format!("{}/{}", self.spec.exchange.as_str(), self.account_id);
         Arc::new(PositionMonitor::new(
             self.mem.clone(),
             Some(Arc::clone(&self.exchange)),
-            engine,
+            Some(Arc::clone(&self.status)),
         ).with_label(label))
     }
 }

@@ -11,7 +11,7 @@ pub struct AIScoringEngine;
 
 impl AIScoringEngine {
     /// Score a single pair and return detailed breakdown
-    pub fn score_pair(metrics: &PairMetrics, risk: &RiskAssessment) -> AIScoringOutput {
+    pub fn score_pair(metrics: &PairMetrics, _risk: &RiskAssessment) -> AIScoringOutput {
         let rs = RSEngine::score_component(metrics);
         let vol = VolumeEngine::score_component(metrics);
         let trend = MomentumEngine::score_trend_component(metrics);

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! OKX v5 Spot REST adapter (Fase 2).
 //!
 //! Implements the `ExchangeClient` trait (see `src/exchange.rs`) against OKX
@@ -252,15 +253,7 @@ impl OkxClient {
     }
 
     fn api_key_display(&self) -> String {
-        if self.api_key.len() > 8 {
-            format!(
-                "{}...{}",
-                &self.api_key[..4],
-                &self.api_key[self.api_key.len() - 4..]
-            )
-        } else {
-            "***".to_string()
-        }
+        crate::util::mask_secret(&self.api_key)
     }
 
     async fn signed_get<T: serde::de::DeserializeOwned>(

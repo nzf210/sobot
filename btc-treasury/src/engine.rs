@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -366,7 +367,7 @@ Strategy={}",
 
     // ── Cooldown helpers ─────────────────────────────────────────────────
 
-    async fn cooldown_elapsed(&self, pair: &str, regime: &str) -> bool {
+    async fn cooldown_elapsed(&self, pair: &str, _regime: &str) -> bool {
         let map = self.last_llm_call.read().await;
         if let Some(last) = map.get(pair) {
             // If regime changed, allow LLM call (regime change is a real signal)

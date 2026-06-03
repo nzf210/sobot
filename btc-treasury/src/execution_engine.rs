@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Execution Engine
 //! Executes market buy/sell, records positions, manages treasury split on close.
 

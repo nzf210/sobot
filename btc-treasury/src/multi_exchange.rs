@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Multi-exchange dispatcher (Fase 0).
 //!
 //! Fase 0 scope: a thin wrapper around a single `Arc<dyn ExchangeClient>`,

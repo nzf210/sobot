@@ -159,7 +159,7 @@ impl Indicators {
     }
 
     /// Is volume expanding across timeframes? (1h vol > 4h avg, etc.)
-    pub fn is_volume_expansion(candles_15m: &[Ohlcv], candles_1h: &[Ohlcv], candles_4h: &[Ohlcv]) -> bool {
+    pub fn is_volume_expansion(_candles_15m: &[Ohlcv], candles_1h: &[Ohlcv], candles_4h: &[Ohlcv]) -> bool {
         let avg_1h: f64 = if candles_1h.len() >= 4 {
             candles_1h.iter().rev().take(4).map(|c| c.volume).sum::<f64>() / 4.0
         } else {
