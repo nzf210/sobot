@@ -166,7 +166,17 @@ impl PositionMonitor {
                     } else {
                         current_price
                     };
-                    self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value, btc_price_for_conversion);
+                    // If update_treasury_on_close refuses (e.g. missing BTCUSDT
+                    // price for a USDT-quote pair), keep monitoring the
+                    // position rather than silently dropping the streak update.
+                    if !self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value, btc_price_for_conversion) {
+                        tracing::error!(
+                            "Treasury update refused for {} — keeping position open, will retry next tick",
+                            pair_id
+                        );
+                        modified = false;
+                        continue;
+                    }
                 } else {
                     // Live: execute market sell to close the position
                     let close_result = exchange.place_market_sell(&pair_id, position_size).await;
@@ -183,7 +193,12 @@ impl PositionMonitor {
                             } else {
                                 current_price
                             };
-                            self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value, btc_price_for_conversion);
+                            if !self.mem.update_treasury_on_close(&pair_id, pnl_pct, position_value, btc_price_for_conversion) {
+                                tracing::error!(
+                                    "Treasury update refused for {} (order filled) — resyncing ledger anyway",
+                                    pair_id
+                                );
+                            }
                             // Re-sync the local ledger with the live Binance
                             // balances now that the close has filled. The
                             // PnL-based update above is the rough estimate;

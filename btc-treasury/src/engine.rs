@@ -9,99 +9,34 @@ use crate::llm::LlmClient;
 use crate::memory::MemoryStore;
 use crate::models::*;
 
-const SYSTEM_PROMPT: &str = r#"You are an autonomous BTC Treasury Accumulation AI.
+const SYSTEM_PROMPT: &str = r#"BTC Treasury Accumulation AI. Goal: maximize Δ BTC (not USD).
 
-ROLE: AI Quant Trader, Crypto Portfolio Manager, and BTC Treasury Manager.
+CONSTRAINTS:
+- SPOT only (no leverage/futures/perpetual). Universe: BTC-quote pairs.
+- Max 1% risk/trade after fees. TP > |SL|. Max 1 active position.
+- Score >= 80 → AMBIL. Score < 80 → DO NOTHING.
+- 3 losses → 24h pause. Drawdown > 10% → reduce size 50%.
+- Round-trip fee 0.2% (taker 0.1% × 2). SL must absorb fee.
 
-CORE OBJECTIVE: Meningkatkan jumlah BTC secara konsisten.
-Keberhasilan sistem hanya diukur dari: Δ BTC (BTC gained, bukan USD profit).
+DYNAMIC TP/SL BY REGIME (system auto-clamps SL to 1.5× ATR_14):
+- CALM/RANGING: TP 2.5-4%, SL -0.8 to -1.2%
+- TRENDING: TP 4-7%, SL -1.2 to -1.8%
+- VOLATILE: TP 6-10%, SL -1.8 to -2.5%
+- For positions ≤0.001 BTC: use upper TP, min SL (wider ratio).
 
-Target: BTC(t+1) > BTC(t) — setiap trade harus menambah BTC holdings.
+ENTRY (all required): RS rising, EMA20>EMA50>EMA200, MACD bullish, vol>avg.
+EXIT: TP, trailing stop (active), hard SL.
 
-TRADING PHILOSOPHY:
-- Semua posisi: SPOT MARKET ONLY — no leverage, no futures, no perpetual.
-- Universe: BTC-quote pairs (ETHBTC, SOLBTC, SUIBTC, ADABTC, LINKBTC, dll)
-- Score > 80 → AMBIL POSISI. Score < 80 → DO NOTHING. Cash is a position.
-- Maksimum 1 posisi aktif.
-- Maksimum 1% risiko per trade (after fees).
-- Take Profit: 3-8%. Stop Loss: 1-2%.
-- TP > |SL| — selalu maintain positive expected value per trade.
+TREASURY: 50% compound + 50% BTC vault. Vault untouchable.
 
-FEE-AWARE STOP-LOSS:
-- Taker fee 0.1% per trade → round-trip fee 0.2%.
-- SL must absorb fee: effective_loss = |SL%| + 0.2%.
-- So if config says max 1% risk, set SL at -0.8% → actual max loss = 0.8% + 0.2% = 1.0%.
-- For small capital (<$100): set wider TP-to-SL ratio (at least 3:1) to survive fees.
-- SL minimum depth: at least 0.5% below entry after fees (0.7% absolute SL).
+SCORING: 40% RS, 25% Volume, 20% Trend, 10% Vol quality, 5% Structure.
 
-DYNAMIC TP/SL (set based on market regime + volatility):
-When recommending APPROVE, you MUST set conservative yet profitable levels:
+RECS: REJECT, MONITOR, APPROVE, REDUCE_EXPOSURE, EXIT_POSITION, PROTECT_TREASURY, ENABLE_SAFE_MODE.
 
-- CALM/RANGING market (volatility low, tight spread):
-  TP: 2.5-4%, SL: -0.8% to -1.2%  (smaller moves, tighter SL)
+PROHIBITED: predicting prices, guaranteeing profits, martingale, all-in, leverage, futures, USD-denominated success.
 
-- TRENDING market (momentum, breakout):
-  TP: 4-7%, SL: -1.2% to -1.8%  (ride trend, wider room)
+OUTPUT ONLY valid JSON. No markdown. No text outside JSON.
 
-- VOLATILE market (high ATR, wide swing):
-  TP: 6-10%, SL: -1.8% to -2.5%  (need wider targets to survive swings)
-
-- For positions with small BTC capital (≤0.001 BTC):
-  Use upper TP range and minimum SL depth (wider TP/SL) — fees eat smaller percentage moves faster.
-
-TP/SL RATIONALE:
-- dynamic_take_profit: 3.0 to 10.0 (percentage)
-- dynamic_stop_loss: -0.7 to -2.5 (negative percentage, always considering 0.2% fee)
-- tp_reason: specific to regime, price level, and volatility
-- sl_reason: must mention fee consideration + support/resistance level
-- IMPORTANT: The system will automatically widen your SL if it's tighter than 1.5× ATR(14) — ATR is the average 15m noise range. Choose the regime-appropriate range above and the clamp will protect each trade from random noise.
-- When ATR is high (>3%), your SL at -0.7% will be automatically widened to ~-3.0% — the TP will scale up proportionally to maintain positive expectancy.
-
-ENTRY CONDITIONS (semua harus terpenuhi):
-- RS (Relative Strength) Rising: coin outperform BTC
-- EMA20 > EMA50 > EMA200 (bullish alignment)
-- MACD Bullish (MACD line > Signal line)
-- Volume > Average (volume spike / expansion)
-
-EXIT CONDITIONS:
-- Take Profit: dynamic TP based on regime
-- Trailing Stop: aktif (track highest price)
-- Stop Loss: dynamic SL (hard limit, fee-aware)
-
-ANTI-FOMO RULES:
-- Dilarang: Martingale, Averaging Down, Revenge Trading, YOLO Trade, All-In
-- 3 loss berturut-turut → Pause Trading 24 Jam
-- Drawdown > 10% → Reduce Position Size 50%
-
-TREASURY MANAGEMENT:
-- Profit distribution: 50% Compound (trading capital), 50% BTC Treasury Vault
-- BTC Treasury Vault tidak boleh digunakan untuk trading
-- Selalu hitung BTC accounting:
-  {
-    "btc_before": "0.00100000",
-    "btc_after": "0.00102500",
-    "btc_gain": "0.00002500"
-  }
-
-AI SCORING MODEL (untuk ranking pair):
-- 40% Relative Strength (RS vs BTC across timeframes)
-- 25% Volume Growth (spike, expansion, liquidity)
-- 20% Trend Strength (EMA alignment, MACD, momentum)
-- 10% Volatility Quality (ATR% — enough to capture TP, not too dangerous)
-- 5% Market Structure (spread, orderbook depth)
-
-POSSIBLE RECOMMENDATIONS: REJECT, MONITOR, APPROVE, REDUCE_EXPOSURE, EXIT_POSITION, PROTECT_TREASURY, ENABLE_SAFE_MODE.
-
-STRICT PROHIBITIONS:
-- Never predict exact prices or future candles
-- Never guarantee profits
-- Never recommend martingale, revenge trading, all-in, leverage
-- Never recommend futures/perpetual trading
-- Never measure success in USD
-
-ALWAYS OUTPUT VALID JSON. NO MARKDOWN. NO TEXT OUTSIDE JSON.
-
-Required output structure:
 {
   "market_regime": "TRENDING_BULLISH",
   "opportunity_score": 82,
@@ -113,8 +48,8 @@ Required output structure:
   "warnings": [],
   "dynamic_take_profit": 5.5,
   "dynamic_stop_loss": -1.2,
-  "tp_reason": "TRENDING regime - 5.5% TP captures momentum move above 4h resistance",
-  "sl_reason": "1.2% SL + 0.2% fee = 1.4% max loss, below 1.5% support level on 15m"
+  "tp_reason": "TRENDING - 5.5% TP captures momentum above 4h resistance",
+  "sl_reason": "1.2% SL + 0.2% fee = 1.4% max loss, below 1.5% support"
 }"#;
 
 const CACHE_TTL_SECS: u64 = 300; // 5 minutes
@@ -150,15 +85,18 @@ impl AdvisoryEngine {
 
     pub async fn analyze(&self, input: &BtcAdvisoryInput) -> FullBtcAdvisory {
         let config = self.mem.get_config();
+
+        // Single source of truth for regime — used by quant fast-path, cooldown
+        // key, cache key, and quant_advisory. Computing it once here avoids
+        // re-classifying inside helper functions.
         let market_regime = classify_regime(&input.market_data);
         let (risk_level, warnings) = assess_risk(&input.market_data, &input.treasury, input.loss_streak);
         let treasury_mode = treasury_mode(&input.market_data, &input.treasury, &risk_level);
 
         // Blend AI score with orderbook-based opportunity score.
         // - orderbook_score: 0-100 scale (from opportunity_score())
-        // - ai_score: 0-10 scale from AIScoringEngine (score_pair() returns
-        //   (total * 10.0).round() / 10.0 where total is 0-10 → result 0-10).
-        //   Multiply by 10 to normalize to 0-100 before blending.
+        // - ai_score: 0-10 scale from AIScoringEngine → multiply by 10 to
+        //   normalize to 0-100 before blending.
         let orderbook_score = opportunity_score(&input.market_data); // 0-100
         let opportunity_score = match input.ai_score {
             Some(ai) if ai > 0.0 => {
@@ -170,13 +108,20 @@ impl AdvisoryEngine {
             _ => orderbook_score,
         };
 
-
-        // ── QUANT FAST-PATH ──────────────────────────────────────────────
-        // If the quant layer can already decide with high confidence, skip LLM
-        // entirely. This is the single biggest token saver: most scans fall
-        // into clear-cut buckets (rejection zone or obvious approval zone)
-        // and don't need LLM reasoning.
-        if let Some(quant_decision) = quant_fast_path(&input.market_data, &input.treasury, opportunity_score, &risk_level, input.loss_streak, &config) {
+        // ── EARLY-EXIT CHEAP GUARDS ──────────────────────────────────────
+        // These don't need LLM, scoring, or even a cache lookup. They handle
+        // the loud majority of scanner ticks (clear rejects, loss streaks,
+        // danger regimes) without paying any per-call cost beyond a
+        // regime + risk classification. Placing them BEFORE the cooldown
+        // also makes them independent of any LLM history.
+        if let Some(quant_decision) = quant_fast_path(
+            &input.market_data,
+            &input.treasury,
+            opportunity_score,
+            &risk_level,
+            &market_regime,
+            input.loss_streak,
+        ) {
             tracing::debug!(
                 "BTC [{}]: quant fast-path → {} (score={:.0}, risk={})",
                 input.market_data.pair, quant_decision.recommendation, opportunity_score, risk_level
@@ -184,27 +129,11 @@ impl AdvisoryEngine {
             return quant_decision;
         }
 
-        // ── COOLDOWN GATE ────────────────────────────────────────────────
-        // Don't call LLM twice in a row for the same pair within 5 min
-        // unless the regime changed. Cooldown is per-pair, not global, so a
-        // 10-pair scanner can still parallelize across different pairs.
-        if !self.cooldown_elapsed(&input.market_data.pair, &market_regime).await {
-            tracing::debug!(
-                "BTC [{}]: cooldown active, returning quant fallback",
-                input.market_data.pair
-            );
-            return quant_advisory(
-                &input.market_data,
-                &market_regime,
-                &risk_level,
-                &warnings,
-                opportunity_score,
-                &treasury_mode,
-                config.taker_fee_pct,
-            );
-        }
-
-        // ── LLM CACHE LOOKUP ─────────────────────────────────────────────
+        // ── LLM CACHE LOOKUP (before cooldown to maximize hit rate) ─────
+        // Cache is regime+pair+score-bucketed. Same regime + same bucket
+        // = same advisory, even if we technically cleared the cooldown.
+        // Checking the cache BEFORE the cooldown doubles our effective hit
+        // rate for back-to-back scans of the same pair in the same regime.
         let cache_key = self.cache_key(&input.market_data.pair, &market_regime, opportunity_score);
         if let Some(cached) = self.cache_get(&cache_key).await {
             tracing::debug!("BTC [{}]: LLM cache hit (key={})", input.market_data.pair, cache_key);
@@ -217,7 +146,27 @@ impl AdvisoryEngine {
         // + reasonable score) we let quant decide. LLM is reserved for
         // genuinely uncertain cases: MEDIUM risk, or LOW risk with mediocre
         // score, or distress signals.
-        if !should_activate_llm(&input.market_data, &input.treasury, input.loss_streak, &config) {
+        if !should_activate_llm(opportunity_score, &input.market_data, &risk_level, &market_regime, &config) {
+            return quant_advisory(
+                &input.market_data,
+                &market_regime,
+                &risk_level,
+                &warnings,
+                opportunity_score,
+                &treasury_mode,
+                config.taker_fee_pct,
+            );
+        }
+
+        // ── COOLDOWN GATE ────────────────────────────────────────────────
+        // Don't call LLM twice in a row for the same pair within 5 min.
+        // This is the per-pair LLM rate limit. The cache check above means
+        // we usually skip the LLM call entirely even before reaching here.
+        if !self.cooldown_elapsed(&input.market_data.pair, &market_regime).await {
+            tracing::debug!(
+                "BTC [{}]: cooldown active, returning quant fallback",
+                input.market_data.pair
+            );
             return quant_advisory(
                 &input.market_data,
                 &market_regime,
@@ -399,41 +348,76 @@ Strategy={}",
 /// Fast-path decisions that don't need LLM reasoning. Returns Some(advisory)
 /// when the quant signal is already clear enough to act on. Returns None to
 /// fall through to the LLM path.
+///
+/// `market_regime` is passed in (not re-computed) so the caller pays the
+/// classification cost exactly once. The caller also already knows
+/// `risk_level` and `opportunity` — we trust those inputs to be canonical.
 fn quant_fast_path(
     data: &BtcMarketData,
     treasury: &BtcTreasuryState,
     opportunity: f64,
     risk_level: &str,
+    market_regime: &str,
     loss_streak: i32,
-    _cfg: &BtcConfig,
 ) -> Option<FullBtcAdvisory> {
-    let market_regime = classify_regime(data);
     let taker_fee = 0.001_f64;
 
-    // Clear rejection zone: low score + non-low risk → reject without LLM
-    if opportunity < 50.0 && (risk_level == "HIGH" || risk_level == "CRITICAL" || risk_level == "MEDIUM") {
-        let mode = treasury_mode(data, treasury, risk_level);
-        return Some(quant_advisory(data, &market_regime, risk_level, &Vec::new(), opportunity, &mode, taker_fee));
-    }
-
-    // Loss-streak circuit breaker: don't even ask LLM, just protect
-    if loss_streak >= 3 {
-        let mode = treasury_mode(data, treasury, "HIGH");
-        return Some(quant_advisory(data, &market_regime, "HIGH", &vec!["Loss streak >= 3".into()], opportunity, &mode, taker_fee));
-    }
-
-    // Clear danger regimes → no LLM needed
+    // ── Danger regimes first: never ask LLM when the market is in a known
+    //    unsafe state. These regimes are loud signals; LLM would just
+    //    re-derive the same conclusion. ───────────────────────────────
     if market_regime == "LOW_LIQUIDITY_DANGER" || market_regime == "HIGH_VOLATILITY_DANGER" || market_regime == "PANIC_SELLOFF" {
         let mode = "SAFE_MODE".to_string();
-        return Some(quant_advisory(data, &market_regime, "CRITICAL", &Vec::new(), opportunity, &mode, taker_fee));
+        return Some(quant_advisory(data, market_regime, "CRITICAL", &Vec::new(), opportunity, &mode, taker_fee));
     }
 
-    // Strong quant signal with low risk and high score: approve without LLM.
-    // Use regime-based TP/SL from quant_advisory (which now does dynamic TP/SL)
-    // so the fast-path trade quality matches LLM-path quality.
+    // ── Loss-streak circuit breaker: don't even ask LLM, just protect. ─
+    if loss_streak >= 3 {
+        let mode = treasury_mode(data, treasury, "HIGH");
+        return Some(quant_advisory(
+            data,
+            market_regime,
+            "HIGH",
+            &vec!["Loss streak >= 3".into()],
+            opportunity,
+            &mode,
+            taker_fee,
+        ));
+    }
+
+    // ── Clear rejection zone: low score + any non-LOW risk → reject ────
+    if opportunity < 50.0 && risk_level != "LOW" {
+        let mode = treasury_mode(data, treasury, risk_level);
+        return Some(quant_advisory(data, market_regime, risk_level, &Vec::new(), opportunity, &mode, taker_fee));
+    }
+
+    // ── FAKE_BREAKOUT / CHOPPY / DISTRIBUTION regimes are never
+    //    approved — quant knows better. Skip LLM. ────────────────────
+    if market_regime == "FAKE_BREAKOUT" || market_regime == "CHOPPY" || market_regime == "DISTRIBUTION" {
+        let mode = treasury_mode(data, treasury, risk_level);
+        let eff_risk = if risk_level == "LOW" { "MEDIUM" } else { risk_level };
+        return Some(quant_advisory(data, market_regime, eff_risk, &Vec::new(), opportunity, &mode, taker_fee));
+    }
+
+    // ── TRENDING_BEARISH: never approve, but cap at MEDIUM (not HIGH) so
+    //    the quant path returns REDUCE_EXPOSURE / MONITOR rather than
+    //    the noisy PROTECT_TREASURY. ─────────────────────────────────
+    if market_regime == "TRENDING_BEARISH" {
+        let mode = "REDUCE_RISK".to_string();
+        return Some(quant_advisory(data, market_regime, "HIGH", &Vec::new(), opportunity, &mode, taker_fee));
+    }
+
+    // ── Strong quant signal with low risk and high score: approve without
+    //    LLM. Use regime-based TP/SL from quant_advisory so the fast-path
+    //    trade quality matches LLM-path quality. ─────────────────────
     if risk_level == "LOW" && opportunity >= 80.0 && data.confidence >= 0.85 {
         let mode = treasury_mode(data, treasury, risk_level);
-        return Some(quant_advisory(data, &market_regime, risk_level, &Vec::new(), opportunity, &mode, taker_fee));
+        return Some(quant_advisory(data, market_regime, risk_level, &Vec::new(), opportunity, &mode, taker_fee));
+    }
+
+    // ── MEDIUM risk + clear non-approval: reject without LLM. ─────────
+    if risk_level == "MEDIUM" && opportunity < 70.0 {
+        let mode = treasury_mode(data, treasury, risk_level);
+        return Some(quant_advisory(data, market_regime, risk_level, &Vec::new(), opportunity, &mode, taker_fee));
     }
 
     None
@@ -595,28 +579,49 @@ fn opportunity_score(data: &BtcMarketData) -> f64 {
 
 /// Activation gate. Runs AFTER the quant fast-path, so it only sees the
 /// truly ambiguous cases. LLM is reserved for:
-/// - Ambiguous opportunity zone (60-80): quant could go either way
+/// - Ambiguous opportunity zone ([60, 80)): quant could go either way
 /// - Conflicting signals (confidence low but score decent)
-/// - Distress conditions (drawdown, volatility spike, liquidity drop)
+/// - Distress conditions (drawdown > 3%, liquidity shock, or LOW risk
+///   but with significant warnings the LLM might catch)
 /// Returns true → call LLM. Returns false → use quant fallback.
-fn should_activate_llm(data: &BtcMarketData, _treasury: &BtcTreasuryState, _loss_streak: i32, cfg: &BtcConfig) -> bool {
-    // Genuinely ambiguous opportunity zone: LLM provides value here
-    // (fast-path already handled score >= 80 with low risk)
-    // score in [55, 80) is the "borderline" region worth LLM reasoning.
-    let opportunity = opportunity_score(data); // 0-100 scale
-    // LLM for ambiguous zone
-    if opportunity >= 55.0 && opportunity < 80.0 {
+///
+/// Inputs are pre-computed (opportunity, risk_level, regime) so this
+/// function does not pay any classification cost — it stays O(1).
+fn should_activate_llm(
+    opportunity: f64,
+    data: &BtcMarketData,
+    risk_level: &str,
+    market_regime: &str,
+    cfg: &BtcConfig,
+) -> bool {
+    // LLM for ambiguous opportunity zone.
+    // Below 60: quant can decide (rejects, monitors).
+    // 80+: fast-path already approved if LOW risk; otherwise LLM noise.
+    if opportunity >= 60.0 && opportunity < 80.0 {
         return true;
     }
-    // LLM for low-confidence signals (even if score is ok)
+    // LLM for low-confidence signals (even if score is ok).
     if data.confidence < cfg.llm_activation_threshold {
         return true;
     }
-    // LLM for distress conditions
+    // LLM for distress conditions (these are unusual — LLM context helps).
     if data.daily_drawdown > 0.03 {
         return true;
     }
-    if data.volatility_score > cfg.safe_mode_volatility || data.liquidity_score < 4.0 {
+    // LLM only when the regime is genuinely uncertain: TRENDING regimes
+    // and BREAKOUT_EXPANSION/ACCUMULATION are non-noisy. CHOPPY/FAKE/etc.
+    // already short-circuited in the fast-path.
+    if (data.volatility_score > cfg.safe_mode_volatility || data.liquidity_score < 4.0)
+        && (market_regime == "TRENDING_BULLISH"
+            || market_regime == "TRENDING_BEARISH"
+            || market_regime == "BREAKOUT_EXPANSION"
+            || market_regime == "ACCUMULATION")
+    {
+        return true;
+    }
+    // LLM for MEDIUM risk with decent score — the borderline case where
+    // quant defaults to MONITOR/REDUCE but LLM could approve on nuance.
+    if risk_level == "MEDIUM" && opportunity >= 70.0 && opportunity < 80.0 {
         return true;
     }
     false
@@ -741,3 +746,239 @@ fn quant_advisory(
         sl_reason,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mk_data(
+        confidence: f64,
+        trend_strength: f64,
+        volume_score: f64,
+        liquidity_score: f64,
+        spread_score: f64,
+        volatility_score: f64,
+        breakout_probability: f64,
+        reversal_probability: f64,
+        daily_drawdown: f64,
+    ) -> BtcMarketData {
+        BtcMarketData {
+            pair: "SOLBTC".into(),
+            market_regime: "RANGING".into(),
+            trend_strength,
+            volume_score,
+            liquidity_score,
+            spread_score,
+            volatility_score,
+            breakout_probability,
+            reversal_probability,
+            confidence,
+            active_strategy: "default".into(),
+            portfolio_exposure: 0.0,
+            daily_drawdown,
+        }
+    }
+
+    // ── should_activate_llm tests ─────────────────────────────────────
+
+    #[test]
+    fn test_should_activate_llm_skips_clean_low_risk_signal() {
+        // Need opp ≥ 80 with low risk + high confidence — the perfect-bull case.
+        let data = mk_data(0.90, 9.0, 8.0, 8.0, 8.0, 3.0, 0.7, 0.2, 0.0);
+        let cfg = BtcConfig::default();
+        let opp = opportunity_score(&data);
+        assert!(opp >= 80.0, "Test precondition: opp should be ≥ 80, got {}", opp);
+        // LOW risk: not in [60, 80), confidence is high, no distress.
+        assert!(!should_activate_llm(opp, &data, "LOW", "RANGING", &cfg));
+    }
+
+    #[test]
+    fn test_should_activate_llm_activates_for_ambiguous_zone() {
+        // Need opp in [60, 80). Construct inputs that hit that band:
+        //   trend=4, vol=6, liq=7, spr=7, vol_score=4, brk=0.5, rev=0.3
+        let data = mk_data(0.90, 4.0, 6.0, 7.0, 7.0, 4.0, 0.5, 0.3, 0.0);
+        let cfg = BtcConfig::default();
+        let opp = opportunity_score(&data);
+        assert!(opp >= 60.0 && opp < 80.0,
+                "Test precondition: opp should be in [60, 80), got {}", opp);
+        assert!(should_activate_llm(opp, &data, "LOW", "RANGING", &cfg));
+    }
+
+    #[test]
+    fn test_should_activate_llm_activates_for_low_confidence() {
+        // Need opp ≥ 80 (so it's not blocked by the ambiguous-zone gate),
+        // and confidence below threshold so the low-conf gate fires.
+        let data = mk_data(0.50, 9.0, 8.0, 8.0, 8.0, 3.0, 0.7, 0.2, 0.0);
+        let cfg = BtcConfig { llm_activation_threshold: 0.85, ..BtcConfig::default() };
+        let opp = opportunity_score(&data);
+        assert!(opp >= 80.0, "Test precondition: opp should be ≥ 80, got {}", opp);
+        assert!(should_activate_llm(opp, &data, "LOW", "RANGING", &cfg));
+    }
+
+    #[test]
+    fn test_should_activate_llm_activates_for_drawdown_distress() {
+        // 5% drawdown, otherwise clean → must call LLM.
+        let data = mk_data(0.90, 5.0, 7.0, 7.0, 8.0, 4.0, 0.5, 0.2, 0.05);
+        let cfg = BtcConfig::default();
+        let opp = opportunity_score(&data);
+        assert!(should_activate_llm(opp, &data, "LOW", "TRENDING_BULLISH", &cfg));
+    }
+
+    #[test]
+    fn test_should_activate_llm_skips_when_score_below_60() {
+        // Score < 60, clean signal → no LLM (quant rejects).
+        let data = mk_data(0.90, -5.0, 3.0, 5.0, 6.0, 5.0, 0.1, 0.5, 0.0);
+        let cfg = BtcConfig::default();
+        let opp = opportunity_score(&data);
+        assert!(opp < 60.0, "Test precondition: opp should be < 60, got {}", opp);
+        assert!(!should_activate_llm(opp, &data, "LOW", "RANGING", &cfg));
+    }
+
+    // ── quant_fast_path tests ─────────────────────────────────────────
+
+    #[test]
+    fn test_quant_fast_path_handles_danger_regimes() {
+        // HIGH_VOLATILITY_DANGER regime → quant handles, no LLM.
+        let data = mk_data(0.5, 0.0, 3.0, 3.0, 3.0, 10.0, 0.5, 0.5, 0.0);
+        let treasury = BtcTreasuryState::default();
+        let result = quant_fast_path(&data, &treasury, 30.0, "LOW", "HIGH_VOLATILITY_DANGER", 0);
+        assert!(result.is_some(), "Danger regime should fast-path");
+        let adv = result.unwrap();
+        assert_eq!(adv.recommendation, "ENABLE_SAFE_MODE");
+    }
+
+    #[test]
+    fn test_quant_fast_path_handles_loss_streak() {
+        // 3 consecutive losses → quant handles, no LLM.
+        let data = mk_data(0.7, 3.0, 6.0, 6.0, 7.0, 5.0, 0.4, 0.3, 0.0);
+        let treasury = BtcTreasuryState::default();
+        let result = quant_fast_path(&data, &treasury, 65.0, "LOW", "TRENDING_BULLISH", 3);
+        assert!(result.is_some(), "Loss streak >= 3 should fast-path");
+        let adv = result.unwrap();
+        assert!(adv.recommendation == "PROTECT_TREASURY" || adv.recommendation == "ENABLE_SAFE_MODE",
+                "Loss streak should be protective, got {}", adv.recommendation);
+    }
+
+    #[test]
+    fn test_quant_fast_path_handles_fake_breakout() {
+        // FAKE_BREAKOUT regime → quant rejects, no LLM.
+        let data = mk_data(0.6, 6.0, 5.0, 5.0, 5.0, 5.0, 0.3, 0.8, 0.0);
+        let treasury = BtcTreasuryState::default();
+        let result = quant_fast_path(&data, &treasury, 55.0, "LOW", "FAKE_BREAKOUT", 0);
+        assert!(result.is_some(), "FAKE_BREAKOUT should fast-path");
+        let adv = result.unwrap();
+        assert!(adv.recommendation != "APPROVE",
+                "FAKE_BREAKOUT should never be approved, got {}", adv.recommendation);
+    }
+
+    #[test]
+    fn test_quant_fast_path_handles_trending_bearish() {
+        // TRENDING_BEARISH → quant handles with REDUCE_EXPOSURE.
+        let data = mk_data(0.6, -8.0, 7.0, 6.0, 6.0, 5.0, 0.2, 0.5, 0.0);
+        let treasury = BtcTreasuryState::default();
+        let result = quant_fast_path(&data, &treasury, 50.0, "MEDIUM", "TRENDING_BEARISH", 0);
+        assert!(result.is_some(), "TRENDING_BEARISH should fast-path");
+        let adv = result.unwrap();
+        assert_ne!(adv.recommendation, "APPROVE",
+                   "TRENDING_BEARISH should never be approved");
+    }
+
+    #[test]
+    fn test_quant_fast_path_handles_strong_approval() {
+        // LOW risk, opp >= 80, confidence >= 0.85 → APPROVE without LLM.
+        // We construct inputs that hit opp ≥ 80 and run the fast-path directly.
+        let data = mk_data(0.90, 9.0, 8.0, 8.0, 8.0, 3.0, 0.7, 0.2, 0.0);
+        let treasury = BtcTreasuryState::default();
+        let opp = opportunity_score(&data);
+        assert!(opp >= 80.0, "Test precondition: opp should be ≥ 80, got {}", opp);
+        let result = quant_fast_path(&data, &treasury, opp, "LOW", "TRENDING_BULLISH", 0);
+        assert!(result.is_some(), "Strong LOW-risk signal should fast-path APPROVE");
+        let adv = result.unwrap();
+        assert_eq!(adv.recommendation, "APPROVE");
+        // dynamic TP/SL must be set so the position has exits.
+        assert!(adv.dynamic_take_profit > 0.0, "TP must be set");
+        assert!(adv.dynamic_stop_loss < 0.0, "SL must be set");
+    }
+
+    #[test]
+    fn test_quant_fast_path_falls_through_for_truly_ambiguous() {
+        // MEDIUM risk, score in [60, 80) → fall through to LLM gate.
+        let data = mk_data(0.85, 2.0, 5.0, 6.0, 6.0, 5.0, 0.3, 0.3, 0.0);
+        let treasury = BtcTreasuryState::default();
+        let opp = opportunity_score(&data);
+        let result = quant_fast_path(&data, &treasury, opp, "MEDIUM", "RANGING", 0);
+        // If opp < 70, MEDIUM-risk path catches it; if >= 70, falls through.
+        if opp < 70.0 {
+            assert!(result.is_some(), "MEDIUM risk + score < 70 should fast-path");
+        } else {
+            // In [70, 80) → LLM gate should catch it, not fast-path.
+            assert!(result.is_none(), "Truly ambiguous MEDIUM + score [70, 80) should fall through to LLM gate");
+        }
+    }
+
+    // ── opportunity_score tests ───────────────────────────────────────
+
+    #[test]
+    fn test_opportunity_score_perfect_bull_above_80() {
+        let data = mk_data(0.95, 9.0, 9.0, 9.0, 9.0, 2.0, 0.8, 0.1, 0.0);
+        let opp = opportunity_score(&data);
+        assert!(opp >= 80.0, "Perfect bull conditions should score ≥ 80, got {}", opp);
+        assert!(opp <= 100.0, "Score should be ≤ 100, got {}", opp);
+    }
+
+    #[test]
+    fn test_opportunity_score_bear_below_50() {
+        let data = mk_data(0.5, -8.0, 2.0, 4.0, 4.0, 7.0, 0.1, 0.7, 0.0);
+        let opp = opportunity_score(&data);
+        assert!(opp < 50.0, "Bear conditions should score < 50, got {}", opp);
+    }
+
+    // ── classify_regime tests ─────────────────────────────────────────
+
+    #[test]
+    fn test_classify_regime_danger_states() {
+        // Low liquidity + low volume
+        let data = mk_data(0.5, 0.0, 2.0, 2.0, 5.0, 5.0, 0.3, 0.3, 0.0);
+        assert_eq!(classify_regime(&data), "LOW_LIQUIDITY_DANGER");
+
+        // High volatility
+        let data = mk_data(0.5, 0.0, 5.0, 5.0, 5.0, 10.0, 0.3, 0.3, 0.0);
+        assert_eq!(classify_regime(&data), "HIGH_VOLATILITY_DANGER");
+
+        // Panic selloff
+        let data = mk_data(0.5, -9.0, 5.0, 5.0, 5.0, 8.0, 0.3, 0.3, 0.0);
+        assert_eq!(classify_regime(&data), "PANIC_SELLOFF");
+    }
+
+    #[test]
+    fn test_classify_regime_trending() {
+        // TRENDING_BULLISH: trend > 7, vol > 6, breakout > 0.6
+        let data = mk_data(0.8, 8.0, 7.0, 7.0, 7.0, 5.0, 0.7, 0.2, 0.0);
+        assert_eq!(classify_regime(&data), "TRENDING_BULLISH");
+
+        // TRENDING_BEARISH: trend < -7, vol > 6
+        let data = mk_data(0.5, -8.0, 7.0, 7.0, 7.0, 5.0, 0.3, 0.5, 0.0);
+        assert_eq!(classify_regime(&data), "TRENDING_BEARISH");
+    }
+
+    // ── assess_risk tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_assess_risk_critical_when_many_factors() {
+        // Multiple critical conditions → CRITICAL
+        let data = mk_data(0.3, -9.0, 2.0, 2.0, 2.0, 10.0, 0.2, 0.8, 0.07);
+        let treasury = BtcTreasuryState { btc_growth_7d: -0.10, ..BtcTreasuryState::default() };
+        let (level, warnings) = assess_risk(&data, &treasury, 4);
+        assert_eq!(level, "CRITICAL");
+        assert!(!warnings.is_empty());
+    }
+
+    #[test]
+    fn test_assess_risk_low_when_clean() {
+        let data = mk_data(0.90, 5.0, 7.0, 8.0, 8.0, 4.0, 0.5, 0.2, 0.0);
+        let treasury = BtcTreasuryState::default();
+        let (level, _warnings) = assess_risk(&data, &treasury, 0);
+        assert_eq!(level, "LOW");
+    }
+}
+

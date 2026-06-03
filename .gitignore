@@ -39,6 +39,7 @@ id.json
 # Other common secret files
 secrets.json
 credentials.json
+note.md
 
 # ------------------------------------------------------------------------------
 # DATABASES
