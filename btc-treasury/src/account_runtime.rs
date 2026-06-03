@@ -100,15 +100,18 @@ pub struct AccountRuntime {
 }
 
 impl AccountRuntime {
-    /// Build a runtime for a single account. Pairs must already be initialized
-    /// by the caller via `initialize_pairs` (which is async). The
-    /// `non_async_init` helper below provides a sync version that uses
-    /// `tokio::runtime::Handle::current().block_on` — call it from a tokio
-    /// context (which `main.rs` always is).
+    /// Build a runtime for a single account. The returned runtime is
+    /// fully constructed but its scanner pairs are NOT yet loaded — call
+    /// `initialize_pairs_async` afterwards from an async context.
     ///
-    /// The returned runtime includes an `Arc<AccountStatus>` that can be
-    /// passed to the supervisor loop in `main.rs` for heartbeat + restart
-    /// tracking, and to `GET /btc/accounts` for per-account health reporting.
+    /// Why split: `ScannerState::initialize_pairs` takes `&self` and
+    /// `&[String]` and uses `tokio::sync::RwLock`, so it MUST be called
+    /// from an async context. The previous version called
+    /// `Handle::current().block_on(...)` from inside this `fn build`, but
+    /// `main.rs` is `#[tokio::main]` — blocking the current thread from
+    /// within a tokio runtime panics with "Cannot start a runtime from
+    /// within a runtime". The fix is to keep `build` synchronous and
+    /// expose an async init step the caller awaits.
     pub fn build(
         spec: &AccountSpec,
         exchange: Arc<dyn ExchangeClient>,
@@ -135,24 +138,6 @@ impl AccountRuntime {
             mem.clone(),
         ));
 
-        // Initialize scanner pairs from the account spec. The spec's
-        // `scanner_pairs` is the authoritative list for this account
-        // (overrides the global env-provided default). This is async because
-        // ScannerState uses `tokio::sync::RwLock`; we block on it from a
-        // tokio context.
-        let pairs = if spec.scanner_pairs.is_empty() {
-            mem.get_config().scanner_pairs
-        } else {
-            spec.scanner_pairs.clone()
-        };
-        let handle = tokio::runtime::Handle::current();
-        handle.block_on(scanner_state.initialize_pairs(&pairs));
-        {
-            let mut saved_cfg = mem.get_config();
-            saved_cfg.scanner_pairs = pairs;
-            mem.save_config(&saved_cfg);
-        }
-
         let key = AccountKey::from_spec(spec);
         let status = Arc::new(AccountStatus::new(spec.enabled));
         Self {
@@ -165,6 +150,25 @@ impl AccountRuntime {
             executor,
             engine,
             status,
+        }
+    }
+
+    /// Async pair-initialization step. Must be awaited from an async
+    /// context (i.e. from `main.rs`'s `#[tokio::main]` body, NOT from
+    /// inside `build`). Persists the resolved pair list to disk so the
+    /// next startup restores it without re-running the resolution logic.
+    pub async fn initialize_pairs_async(&self) {
+        // Resolve effective pairs: spec override > persisted config > empty.
+        let pairs = if self.spec.scanner_pairs.is_empty() {
+            self.mem.get_config().scanner_pairs
+        } else {
+            self.spec.scanner_pairs.clone()
+        };
+        self.scanner_state.initialize_pairs(&pairs).await;
+        {
+            let mut saved_cfg = self.mem.get_config();
+            saved_cfg.scanner_pairs = pairs;
+            self.mem.save_config(&saved_cfg);
         }
     }
 

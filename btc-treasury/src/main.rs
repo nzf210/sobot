@@ -91,6 +91,11 @@ async fn main() -> std::io::Result<()> {
             &cfg.llm_model,
             &cfg.llm_api_key,
         ));
+        // Pair-initialization is async (ScannerState uses tokio::sync::RwLock);
+        // must run from this async context, NOT inside AccountRuntime::build
+        // (which would deadlock/panic with "Cannot start a runtime from
+        // within a runtime").
+        rt.initialize_pairs_async().await;
 
         // Sync initial balances for THIS runtime. With multiple exchanges
         // under one id, each runtime syncs against its own exchange so the

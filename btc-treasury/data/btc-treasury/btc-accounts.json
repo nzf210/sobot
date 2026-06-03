@@ -1,0 +1,48 @@
+{
+  "accounts": [
+    {
+      "id": "account_a",
+      "label": "Akun A — BTC Price Tracker",
+      "telegram_chat_ids": [339959699],
+      "exchanges": [
+        {
+          "kind": "binance",
+          "api_key": "ISI_API_KEY_BINANCE_AKUN_A_DISINI",
+          "api_secret": "ISI_API_SECRET_BINANCE_AKUN_A_DISINI",
+          "scanner_pairs": ["BTCUSDT"],
+          "enabled": true
+        },
+        {
+          "kind": "okx",
+          "api_key": "ISI_API_KEY_OKX_AKUN_A_DISINI",
+          "api_secret": "ISI_API_SECRET_OKX_AKUN_A_DISINI",
+          "passphrase": "ISI_PASSPHRASE_OKX_AKUN_A_DISINI",
+          "scanner_pairs": ["BTCUSDT"],
+          "enabled": false
+        }
+      ]
+    },
+    {
+      "id": "account_b",
+      "label": "Akun B — Alt/BTC Pairs",
+      "telegram_chat_ids": [986800131],
+      "exchanges": [
+        {
+          "kind": "binance",
+          "api_key": "ISI_API_KEY_BINANCE_AKUN_B_DISINI",
+          "api_secret": "ISI_API_SECRET_BINANCE_AKUN_B_DISINI",
+          "scanner_pairs": ["SOLBTC", "ETHBTC"],
+          "enabled": true
+        },
+        {
+          "kind": "okx",
+          "api_key": "ISI_API_KEY_OKX_AKUN_B_DISINI",
+          "api_secret": "ISI_API_SECRET_OKX_AKUN_B_DISINI",
+          "passphrase": "ISI_PASSPHRASE_OKX_AKUN_B_DISINI",
+          "scanner_pairs": ["SOLBTC", "ETHBTC"],
+          "enabled": false
+        }
+      ]
+    }
+  ]
+}

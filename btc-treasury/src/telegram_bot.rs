@@ -175,6 +175,19 @@ pub struct BtcBot {
 
 impl Clone for BtcBot {
     fn clone(&self) -> Self {
+        // CRITICAL: do NOT call `blocking_read()` on a tokio RwLock from within
+        // an async context — it panics with "Cannot block the current thread
+        // from within a runtime". `BtcBot::clone` is invoked from
+        // `BtcBot::start()` (which is `async`) and would crash the bot on
+        // startup. The lock is uncontended at clone time (only `start()`
+        // populates it), so a non-blocking `try_read` always succeeds. The
+        // fallback to `Default::default()` is a defensive zero-map in case
+        // a future caller ever clones from a context where the lock is held.
+        let active = self
+            .active_account
+            .try_read()
+            .map(|g| g.clone())
+            .unwrap_or_default();
         Self {
             token: self.token.clone(),
             whitelist: self.whitelist.clone(),
@@ -183,7 +196,7 @@ impl Clone for BtcBot {
             exchange: self.exchange.clone(),
             scanner: self.scanner.clone(),
             per_account: self.per_account.clone(),
-            active_account: RwLock::new(self.active_account.blocking_read().clone()),
+            active_account: RwLock::new(active),
         }
     }
 }

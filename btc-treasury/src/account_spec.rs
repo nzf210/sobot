@@ -144,14 +144,27 @@ pub fn legacy_default_spec(
         ),
     };
 
-    let key_resolved = std::env::var(&key_env).ok().filter(|v| !v.trim().is_empty()).is_some()
-        || std::env::var("EXCHANGE_API_KEY").ok().filter(|v| !v.trim().is_empty()).is_some();
-    let secret_resolved = std::env::var(&secret_env).ok().filter(|v| !v.trim().is_empty()).is_some()
-        || std::env::var("EXCHANGE_API_SECRET").ok().filter(|v| !v.trim().is_empty()).is_some();
-
-    if !key_resolved || !secret_resolved {
+    // Resolve the actually-present env var name for each credential. The
+    // probe below also accepts the legacy `EXCHANGE_API_KEY` /
+    // `EXCHANGE_API_SECRET` aliases (used by single-exchange configs that
+    // pre-date the per-exchange naming), but the var we *store* in the
+    // `Credentials` struct must be the one that's actually set, otherwise
+    // `Credentials::resolve()` later will fail to find it and the
+    // dispatcher drops the account silently.
+    let resolved_key_env: String = if std::env::var(&key_env).ok().filter(|v| !v.trim().is_empty()).is_some() {
+        key_env
+    } else if std::env::var("EXCHANGE_API_KEY").ok().filter(|v| !v.trim().is_empty()).is_some() {
+        "EXCHANGE_API_KEY".to_string()
+    } else {
         return None;
-    }
+    };
+    let resolved_secret_env: String = if std::env::var(&secret_env).ok().filter(|v| !v.trim().is_empty()).is_some() {
+        secret_env
+    } else if std::env::var("EXCHANGE_API_SECRET").ok().filter(|v| !v.trim().is_empty()).is_some() {
+        "EXCHANGE_API_SECRET".to_string()
+    } else {
+        return None;
+    };
 
     // For OKX, also require the passphrase; otherwise the dispatcher will
     // refuse to build the client. Fail fast here so the user sees a clear
@@ -170,8 +183,8 @@ pub fn legacy_default_spec(
         },
         exchange,
         credentials: Credentials::EnvKeySecret {
-            key_env,
-            secret_env,
+            key_env: resolved_key_env,
+            secret_env: resolved_secret_env,
             passphrase_env,
         },
         scanner_pairs,
