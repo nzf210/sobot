@@ -26,6 +26,8 @@ type AppConfig struct {
 	ScannerIntervalSecs   uint64
 	ReportIntervalMins    uint64
 	ScannerPairs          []string
+	DBDriver              string
+	DBDsn                 string
 }
 
 func Load() *AppConfig {
@@ -63,20 +65,28 @@ func Load() *AppConfig {
 		scannerPairs = []string{"ETHBTC", "SOLBTC"}
 	}
 
+	botToken := getEnv("TELEGRAM_BOT_BTC_TOKEN", getEnv("TELEGRAM_BOT_TOKEN", ""))
+	whitelist := getEnvWhitelist("TELEGRAM_WHITELIST_USER_BTC_IDS")
+	if len(whitelist) == 0 {
+		whitelist = getEnvWhitelist("TELEGRAM_WHITELIST_USER_IDS")
+	}
+
 	return &AppConfig{
 		BackendPort:           getEnvInt("BTC_TREASURY_PORT", 8090),
 		LlmURL:                getEnv("LLM_URL", "https://api.openai.com/v1"),
 		LlmAPIKey:             os.Getenv("LLM_API_KEY"),
 		LlmModel:              getEnv("LLM_MODEL", "gpt-4o-mini"),
 		DataDir:               dataDir,
-		TelegramBotToken:      getEnv("TELEGRAM_BOT_BTC_TOKEN", ""),
-		TelegramWhitelist:     getEnvWhitelist("TELEGRAM_WHITELIST_USER_BTC_IDS"),
+		TelegramBotToken:      botToken,
+		TelegramWhitelist:     whitelist,
 		TelegramReportChatIDs: getEnvWhitelist("TELEGRAM_REPORT_CHAT_IDS"),
 		ExchangeName:          getEnv("EXCHANGE_NAME", "binance"),
 		WalletPassword:        os.Getenv("WALLET_PASSWORD"),
 		ScannerIntervalSecs:   uint64(getEnvInt("BTC_SCANNER_INTERVAL_SECS", 900)),
 		ReportIntervalMins:    uint64(getEnvInt("BTC_REPORT_INTERVAL_MINS", 5)),
 		ScannerPairs:          scannerPairs,
+		DBDriver:              getEnv("DB_DRIVER", "sqlite"),
+		DBDsn:                 getEnv("DB_DSN", ""),
 	}
 }
 

@@ -50,11 +50,20 @@ func main() {
 	log.Printf("BTC Treasury Refactored Go Service starting...")
 
 	cfg := config.Load()
+
+	// Check for migration flag
+	for _, arg := range os.Args {
+		if arg == "--migrate-to-db" {
+			runDbMigration(cfg)
+			return
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Load account specifications
-	accountSpecs, err := config.LoadAccountSpecs(cfg.ExchangeName, cfg.DataDir, cfg.ScannerPairs)
+	accountSpecs, err := config.LoadAccountSpecs(cfg.ExchangeName, cfg.DataDir, cfg.ScannerPairs, cfg.DBDriver, cfg.DBDsn)
 	if err != nil {
 		log.Fatalf("Failed to load account specs: %v", err)
 	}
@@ -90,7 +99,17 @@ func main() {
 			continue
 		}
 
-		rt := runtime.Build(&specCopy, exClient, cfg.DataDir, cfg.LlmURL, cfg.LlmModel, cfg.LlmAPIKey)
+		var mem memory.Store
+		if cfg.DBDsn != "" {
+			mem, err = memory.NewGormDBStore(cfg.DBDriver, cfg.DBDsn, spec.ID, spec.Exchange)
+			if err != nil {
+				log.Fatalf("Failed to initialize database store for %s/%s: %v", spec.ID, spec.Exchange, err)
+			}
+		} else {
+			mem = memory.NewMemoryStoreWithAccount(cfg.DataDir, spec.ID, spec.Exchange)
+		}
+
+		rt := runtime.Build(&specCopy, exClient, mem, cfg.LlmURL, cfg.LlmModel, cfg.LlmAPIKey)
 		rt.InitializePairs(ctx)
 
 		// Sync initial balances for this runtime
@@ -170,7 +189,7 @@ func main() {
 	if cfg.TelegramBotToken != "" {
 		var defaultScanner *scanner.ScannerState
 		var defaultEngine *engine.AdvisoryEngine
-		var defaultMem *memory.MemoryStore
+		var defaultMem memory.Store
 		if len(runtimeList) > 0 {
 			defaultScanner = runtimeList[0].ScannerState
 			defaultEngine = runtimeList[0].Engine
