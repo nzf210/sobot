@@ -26,7 +26,8 @@ executor-ts (Node/Express, port 3009)
   ├── Encrypted wallet loader
   └── DLMM deployment stub
 
-btc-treasury (Rust/Actix, port 8090)
+btc-treasury (Go, port 8090/headless)
+  ├── Multi-account & Exchange runtime
   ├── AdvisoryEngine (hybrid quant + LLM)
   ├── Binance Spot API client
   └── BTC Telegram bot
@@ -88,27 +89,30 @@ btc-treasury (Rust/Actix, port 8090)
 
 ---
 
-### btc-treasury (port 8090)
+### btc-treasury (Headless Worker)
 
-**Stack**: Rust, Actix-web
+**Stack**: Go, Gorm (SQLite/PostgreSQL), telegram-bot-api
 
 **Integrations**: Binance Spot API, OpenAI-compatible LLM
 
 **Key files**:
-- `src/main.rs` — Entry point; initializes config, engine, Binance client, scanner, reporter, Telegram bot
-- `src/server.rs` — Actix-web server; 8 REST endpoints
-- `src/engine.rs` — `AdvisoryEngine` — hybrid quant + LLM BTC trading advisor; 10-regime classifier; risk scoring; treasury mode logic
-- `src/models.rs` — All data types: `BtcMarketData`, `BtcTreasuryState`, `BtcAdvisoryInput`, `BtcAdvisoryPosition`, `BtcConfig`, `FullBtcAdvisory`
-- `src/llm.rs` — OpenAI-compatible LLM client
-- `src/scanner.rs` — Binance pair scanner (async, configurable interval); discovers BTC-quote pairs
-- `src/reporter.rs` — Periodic Telegram treasury reports
-- `src/telegram_bot.rs` — BTC Telegram bot with 18+ commands (see Telegram Bot Commands section)
-- `src/binance.rs` — Binance Spot API client with HMAC-SHA256 signing; market data, order execution, position tracking
-- `src/exchange.rs` — Binance Spot adapter; ExchangeClient trait implementation
-- `src/position_monitor.rs` — Position tracking with TP/SL/trailing stops
-- `src/execution_engine.rs` — Order execution and position management
+- `cmd/btc-treasury/main.go` — Entry point; initializes multi-account runtime, engine, exchange dispatcher, scanner, reporter, and Telegram bot with supervisor pattern
+- `cmd/btc-treasury/migration.go` — `--migrate-to-db` tool for migrating JSON memory to SQL database
+- `internal/engine/advisory.go` — `AdvisoryEngine` — hybrid quant + LLM BTC trading advisor; 10-regime classifier; risk scoring; treasury mode logic
+- `internal/runtime/account_runtime.go` — Multi-account runtime builder connecting spec, exchange, memory, and LLM
+- `internal/config/config.go` — Config structure and multi-account specs (`account_spec.go`)
+- `internal/models/models.go` & `db_models.go` — Data types and GORM schemas
+- `internal/llm/client.go` — OpenAI-compatible LLM client
+- `internal/scanner/scanner.go` — Binance pair scanner (worker loop); discovers BTC-quote pairs
+- `internal/reporter/reporter.go` — Periodic Telegram treasury reports
+- `internal/telegram/bot.go` — BTC Telegram bot with 18+ commands (see Telegram Bot Commands section)
+- `internal/exchange/binance.go` — Binance Spot adapter implementing ExchangeClient trait
+- `internal/monitor/position.go` — Position tracking with TP/SL/trailing stops
+- `internal/execution/engine.go` — Order execution and position management
+- `internal/memory/db_store.go` — DB store implementation (Postgres/SQLite) alongside memory/json store
 
 **Binance Spot Integration**:
+- Multi-account support via account specs
 - Real-time market data fetching (OHLCV, ticker)
 - Pair discovery and management (add/remove/auto-discover BTC-quote pairs)
 - Market buy/sell execution with dynamic TP/SL
@@ -118,15 +122,9 @@ btc-treasury (Rust/Actix, port 8090)
 
 **BTC Treasury Details**:
 
-**API endpoints**:
-- `GET /health` — Health check
-- `POST /btc/advisory` — Analyze market data → advisory recommendation
-- `GET /btc/treasury` / `POST /btc/treasury` — Get/update treasury state
-- `POST /btc/market` — Submit market update; returns advisory with loss streak analysis
-- `GET /btc/positions` — Get open positions
-- `GET /btc/config` / `POST /btc/config` — Get/update configuration
+**Architecture Mode**: Headless worker (No exposed REST API endpoints). Driven entirely by config, supervisor background loops, and Telegram commands.
 
-**AdvisoryEngine**: Pure advisory (no auto-execution). Risk levels: LOW/MEDIUM/HIGH/CRITICAL. Treasury modes: ACCUMULATE/PROTECT/REDUCE_RISK/SAFE_MODE. Recommendations: REJECT/MONITOR/APPROVE/REDUCE_EXPOSURE/EXIT_POSITION/PROTECT_TREASURY/ENABLE_SAFE_MODE.
+**AdvisoryEngine**: Pure advisory + auto-execution via Executor/Monitor. Risk levels: LOW/MEDIUM/HIGH/CRITICAL. Treasury modes: ACCUMULATE/PROTECT/REDUCE_RISK/SAFE_MODE. Recommendations: REJECT/MONITOR/APPROVE/REDUCE_EXPOSURE/EXIT_POSITION/PROTECT_TREASURY/ENABLE_SAFE_MODE.
 
 ---
 
@@ -277,11 +275,17 @@ Separate LLM pipeline with system prompt enforcing strict BTC treasury philosoph
 ## Running
 
 ```bash
-# Go backend
+# Go backend (Solana)
 cd backend-go && go mod tidy && go run ./cmd/main.go
 
 # TS executor
 cd executor-ts && npm install && npm run dev
+
+# BTC Treasury (Go)
+cd btc-treasury && go mod tidy && go run ./cmd/btc-treasury/main.go
+
+# BTC Treasury - Migrate JSON to Database
+cd btc-treasury && go run ./cmd/btc-treasury/main.go --migrate-to-db
 
 # Docker (all services)
 docker-compose up -d
@@ -293,7 +297,7 @@ cd executor-ts && npm run generate-wallet
 **Port Configuration Note**: When using `docker-compose`, the default ports are:
 - backend-go: **8089** (not 8080)
 - executor-ts: **3009** (not 3000)
-- btc-treasury: **8090**
+- btc-treasury: **headless worker** (no ports exposed, consumes via config & telegram)
 
 These defaults override `.env.sample` values. To use different ports, set environment variables before running docker-compose:
 ```bash
