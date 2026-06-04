@@ -42,9 +42,9 @@ func (t reportTitle) Format() string {
 		return fmt.Sprintf("*BTC Scan Report — %s Spot*\n", t.Exchange)
 	}
 	if t.MultiExchange {
-		return fmt.Sprintf("*BTC Scan Report — [%s/%s]*\n", t.AccountID, t.Exchange)
+		return fmt.Sprintf("*BTC Scan Report — \\[%s/%s\\]*\n", utils.EscapeMdv2(t.AccountID), t.Exchange)
 	}
-	return fmt.Sprintf("*BTC Scan Report — [%s]*\n", t.AccountID)
+	return fmt.Sprintf("*BTC Scan Report — \\[%s\\]*\n", utils.EscapeMdv2(t.AccountID))
 }
 
 func Run(

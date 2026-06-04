@@ -83,14 +83,14 @@ Examples: SOLBTC, ETHBTC, SUIBTC, LINKBTC, DOGEBTC, ADABTC
 Auto\-discover with /btc_discover
 
 *Multi‑Exchange*
-One account can run on Binance + OKX simultaneously.
+One account can run on Binance \\+ OKX simultaneously\\.
 /btc_use main okx  → switch to OKX under the same id
 /btc_status        → renders one block per exchange`
 
 const skillsText = `*BTC Treasury Accumulation — Skills*
 
 *1\. Binance Spot Scanner*
-- Poll interval: every 15 min \(configurable\)
+\\- Poll interval: every 15 min \(configurable\)
 - Fetches OHLCV: 15m, 1h, 4h, 1d candles per BTC‑quote pair
 - Auto\-discovers all BTC‑quote pairs from Binance
 - Dynamic pair universe, no manual tracking needed
@@ -114,7 +114,7 @@ const skillsText = `*BTC Treasury Accumulation — Skills*
 - Liquidity check: reject thin pairs
 
 *5\. AI Scoring Model*
-| Component | Weight |
+\\| Component \\| Weight \\|
 | Relative Strength | 40% |
 | Volume Growth | 25% |
 | Trend Strength | 20% |
@@ -136,13 +136,13 @@ Score \* 80 → DO NOTHING \(cash is a position\)
 ✅ EMA20 \* EMA50 \* EMA200 bullish
 ✅ MACD bullish
 ✅ Volume \* Average
-✅ AI Score \* 80
+✅ AI Score \\\* 80
 
 *8\. Exit Conditions*
 - Take Profit: 3\-8% \(dynamic\)
 - Trailing Stop: track peak, trigger on X% drop
 - Stop Loss: 1\-2% \(hard limit\)
-- TP \* |SL| always maintained
+\\- TP \\\* \\|SL\\| always maintained
 
 *9\. BTC Treasury Split*
 On every winning close:
