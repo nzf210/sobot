@@ -204,9 +204,17 @@ func (s *JSONFileStore) UpdateGrowthRatios() {
 	state := s.GetTreasuryState()
 	prev := state.PreviousBtc
 	if prev > 0.0 {
-		ratio := (state.CurrentBtc - prev) / prev
-		state.BtcGrowth7d = ratio
-		state.BtcGrowth30d = ratio
+		state.BtcGrowth7d = (state.CurrentBtc - prev) / prev
+	}
+	s.SaveTreasuryState(state)
+}
+
+func (s *JSONFileStore) UpdateGrowthRatiosWithPrev(currentBtc, prevBtc float64) {
+	state := s.GetTreasuryState()
+	state.PreviousBtc = prevBtc
+	state.CurrentBtc = currentBtc
+	if prevBtc > 0.0 {
+		state.BtcGrowth7d = (currentBtc - prevBtc) / prevBtc
 	}
 	s.SaveTreasuryState(state)
 }
@@ -220,8 +228,6 @@ func (s *JSONFileStore) ResyncAfterFill(liveBtc, liveUsdt float64) {
 	state.UsdtBalance = liveUsdt
 	state.StableValue = liveUsdt
 	s.SaveTreasuryState(state)
-	s.UpdateGrowthRatios()
-	log.Printf("Treasury re-synced after fill: BTC=%.8f USDT=%.2f", liveBtc, liveUsdt)
 }
 
 func (s *JSONFileStore) DeductBalanceForBuy(pair string, quoteSpent float64) {

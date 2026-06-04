@@ -499,12 +499,12 @@ func scanPair(
 			}
 
 			clampedSL := advisory.DynamicStopLoss
+			closeVal := currentPrice
 			riskManager := engines.RiskManager{}
 
 			if pairMetrics != nil {
-				closeVal := pairMetrics.Close15m
-				if closeVal <= 0.0 {
-					closeVal = currentPrice
+				if pairMetrics.Close15m > 0.0 {
+					closeVal = pairMetrics.Close15m
 				}
 				clampedSL = riskManager.ClampSl(advisory.DynamicStopLoss, closeVal, pairMetrics.Atr14)
 			} else {
@@ -513,7 +513,7 @@ func scanPair(
 
 			if clampedSL != advisory.DynamicStopLoss {
 				log.Printf("Scanner [%s]: clamped SL from %.1f%% to %.1f%% (ATR_14=%.6f, close=%.6f)",
-					pair, advisory.DynamicStopLoss, clampedSL, 0.0, currentPrice)
+					pair, advisory.DynamicStopLoss, clampedSL, pairMetrics.Atr14, closeVal)
 				tpSlRatio := 3.0
 				if advisory.DynamicStopLoss != 0.0 {
 					tpSlRatio = math.Max(advisory.DynamicTakeProfit/math.Abs(advisory.DynamicStopLoss), 2.0)

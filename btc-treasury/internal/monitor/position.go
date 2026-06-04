@@ -146,17 +146,21 @@ func (pm *PositionMonitor) CheckPositions(ctx context.Context) {
 			positionSize := positions[i].Size
 			entry := positions[i].EntryPrice
 
-			if cfg.DryRun {
-				positionValue := entry * positionSize
-				btcPriceForConversion := currentPrice
-				if strings.HasSuffix(strings.ToUpper(pairID), "BTC") && strings.ToUpper(pairID) != "BTCUSDT" {
-					btcPriceForConversion = 1.0
-				}
+			positionValue := entry * positionSize
+			btcPriceForConversion := currentPrice
+			if strings.HasSuffix(strings.ToUpper(pairID), "BTC") && strings.ToUpper(pairID) != "BTCUSDT" {
+				btcPriceForConversion = 1.0
+			}
 
-				if !pm.mem.UpdateTreasuryOnClose(pairID, pnlPct, positionValue, btcPriceForConversion) {
-					log.Printf("[%s] Treasury update refused for %s — keeping position open, will retry next tick", pm.label, pairID)
-					modified = false
-					continue
+			closeSucceeded := false
+
+			if cfg.DryRun {
+				if pm.mem.UpdateTreasuryOnClose(pairID, pnlPct, positionValue, btcPriceForConversion) {
+					log.Printf("[%s] Dry run: treasury updated for %s (PnL %.2f%%)", pm.label, pairID, pnlPct)
+					closeSucceeded = true
+				} else {
+					log.Printf("[%s] Dry run: treasury refused for %s — keeping position open", pm.label, pairID)
+					// Don't remove from tracking — treasury needs to allow it first
 				}
 			} else {
 				_, err := pm.exchange.PlaceMarketSell(ctx, pairID, positionSize)
@@ -165,17 +169,10 @@ func (pm *PositionMonitor) CheckPositions(ctx context.Context) {
 					modified = false
 					continue
 				}
-
 				log.Printf("[%s] Position %s closed via market sell", pm.label, pairID)
 
-				positionValue := entry * positionSize
-				btcPriceForConversion := currentPrice
-				if strings.HasSuffix(strings.ToUpper(pairID), "BTC") && strings.ToUpper(pairID) != "BTCUSDT" {
-					btcPriceForConversion = 1.0
-				}
-
-				if !pm.mem.UpdateTreasuryOnClose(pairID, pnlPct, positionValue, btcPriceForConversion) {
-					log.Printf("[%s] Treasury update refused for %s (order filled) — resyncing ledger anyway", pm.label, pairID)
+				if pm.mem.UpdateTreasuryOnClose(pairID, pnlPct, positionValue, btcPriceForConversion) {
+					closeSucceeded = true
 				}
 
 				balances, err := pm.exchange.GetBalances(ctx)
@@ -192,26 +189,25 @@ func (pm *PositionMonitor) CheckPositions(ctx context.Context) {
 				}
 			}
 
-			quality := "neutral"
-			if pnlPct > 5.0 {
-				quality = "excellent"
-			} else if pnlPct > 0.0 {
-				quality = "good"
-			} else if pnlPct > -2.0 {
-				quality = "neutral"
-			} else {
-				quality = "bad"
-			}
+			if closeSucceeded || !cfg.DryRun {
+				quality := "neutral"
+				if pnlPct > 5.0 {
+					quality = "excellent"
+				} else if pnlPct > 0.0 {
+					quality = "good"
+				} else if pnlPct > -2.0 {
+					quality = "neutral"
+				} else {
+					quality = "bad"
+				}
 
-			ts := time.Now().UTC().Format("2006-01-02 15:04")
-			lesson := fmt.Sprintf(
-				"[BTC][%s] %s: PnL %.2f%% (peak %.2f%%). Entry: %.6f, Exit: %.6f. Quality: %s. Close: %s. TP: %.1f%%, SL: %.1f%%",
-				ts, pairID, pnlPct, highestPnlPct, entryPrice, currentPrice, quality, closeReason, takeProfitPct, stopLossPct,
-			)
-			pm.mem.AddLesson(lesson)
+				ts := time.Now().UTC().Format("2006-01-02 15:04")
+				lesson := fmt.Sprintf(
+					"[BTC][%s] %s: PnL %.2f%% (peak %.2f%%). Entry: %.6f, Exit: %.6f. Quality: %s. Close: %s. TP: %.1f%%, SL: %.1f%%",
+					ts, pairID, pnlPct, highestPnlPct, entryPrice, currentPrice, quality, closeReason, takeProfitPct, stopLossPct,
+				)
+				pm.mem.AddLesson(lesson)
 
-			// Update consecutive losses and auto-pause
-			{
 				treasury := pm.mem.GetTreasuryState()
 				if pnlPct <= 0.0 {
 					treasury.ConsecutiveLosses++
@@ -225,9 +221,9 @@ func (pm *PositionMonitor) CheckPositions(ctx context.Context) {
 					treasury.ConsecutiveLosses = 0
 				}
 				pm.mem.SaveTreasuryState(treasury)
-			}
 
-			positionsToRemove = append(positionsToRemove, i)
+				positionsToRemove = append(positionsToRemove, i)
+			}
 		}
 	}
 
