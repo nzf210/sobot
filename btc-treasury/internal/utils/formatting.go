@@ -106,11 +106,9 @@ func SendMdv2Safe(bot *tgbotapi.BotAPI, chatID int64, text string) (*tgbotapi.Me
 
 	var lastMsg *tgbotapi.Message
 	for i, chunk := range chunks {
-		// Escape the chunk before adding to MarkdownV2 body
-		escapedChunk := EscapeMdv2(chunk)
-		body := escapedChunk
+		body := chunk
 		if total > 1 {
-			body = fmt.Sprintf("_%d/%d_\n%s", i+1, total, escapedChunk)
+			body = fmt.Sprintf("_%d/%d_\n%s", i+1, total, chunk)
 		}
 
 		msg := tgbotapi.NewMessage(chatID, body)
