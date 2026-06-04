@@ -7,6 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
+	"btc-treasury/internal/models"
 )
 
 type ExchangeKind string
@@ -101,7 +107,18 @@ type exchangeEntryRaw struct {
 	Risk         *RiskOverrides `json:"risk"`
 }
 
-func LoadAccountSpecs(exchangeName string, dataDir string, scannerPairs []string) ([]AccountSpec, error) {
+func LoadAccountSpecs(exchangeName string, dataDir string, scannerPairs []string, dbDriver string, dbDsn string) ([]AccountSpec, error) {
+	// 0. Database spec loading if DSN is set
+	if dbDsn != "" {
+		specs, err := LoadAccountSpecsFromDB(dbDriver, dbDsn)
+		if err == nil && len(specs) > 0 {
+			return specs, nil
+		}
+		if err != nil {
+			logError(fmt.Sprintf("Database spec load failed: %v. Falling back to files...", err))
+		}
+	}
+
 	// 1. Explicit env-var JSON
 	if jsonStr := strings.TrimSpace(os.Getenv("BTC_ACCOUNTS_JSON")); jsonStr != "" {
 		specs, err := LoadAccountSpecsFromJSON(jsonStr)
@@ -148,6 +165,81 @@ func LoadAccountSpecs(exchangeName string, dataDir string, scannerPairs []string
 
 	// 3. Legacy env-var fallback
 	return LegacyDefaultSpecs(exchangeName, scannerPairs), nil
+}
+
+func LoadAccountSpecsFromDB(driver, dsn string) ([]AccountSpec, error) {
+	var dialector gorm.Dialector
+	if strings.ToLower(driver) == "postgres" || strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		dialector = postgres.Open(dsn)
+	} else {
+		dialector = sqlite.Open(dsn)
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	// AutoMigrate just to ensure the specs tables exist
+	_ = db.AutoMigrate(&models.DbAccountSpec{}, &models.DbAccountExchange{})
+
+	var dbSpecs []models.DbAccountSpec
+	err = db.Preload("Exchanges").Find(&dbSpecs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	var specs []AccountSpec
+	for _, spec := range dbSpecs {
+		if !spec.Enabled {
+			continue
+		}
+		var chatIDs []int64
+		if spec.TelegramChatIDs != "" {
+			_ = json.Unmarshal([]byte(spec.TelegramChatIDs), &chatIDs)
+		}
+
+		for _, ex := range spec.Exchanges {
+			if !ex.Enabled {
+				continue
+			}
+			kind, err := ParseExchangeKind(ex.ExchangeKind)
+			if err != nil {
+				continue
+			}
+
+			var pairs []string
+			if ex.ScannerPairs != "" {
+				for _, p := range strings.Split(ex.ScannerPairs, ",") {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						pairs = append(pairs, p)
+					}
+				}
+			}
+
+			var risk RiskOverrides
+			if ex.RiskOverrides != "" {
+				_ = json.Unmarshal([]byte(ex.RiskOverrides), &risk)
+			}
+
+			specs = append(specs, AccountSpec{
+				ID:    spec.ID,
+				Label: fmt.Sprintf("%s (%s)", spec.Label, kind),
+				Exchange: kind,
+				Credentials: Credentials{
+					ApiKey:     ex.ApiKey,
+					ApiSecret:  ex.ApiSecret,
+					Passphrase: ex.Passphrase,
+				},
+				ScannerPairs:    pairs,
+				TelegramChatIDs: chatIDs,
+				Risk:            risk,
+				Enabled:         ex.Enabled,
+			})
+		}
+	}
+	return specs, nil
 }
 
 func LoadAccountSpecsFromJSON(jsonStr string) ([]AccountSpec, error) {

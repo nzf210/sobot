@@ -29,6 +29,7 @@ wallet.enc
 wallet.json
 *keypair*.json
 id.json
+/btc-treasury/data/btc-treasury/btc-accounts.json
 
 # SSL Certificates / SSH Keys
 *.pem

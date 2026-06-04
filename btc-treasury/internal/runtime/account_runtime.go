@@ -56,7 +56,7 @@ type AccountRuntime struct {
 	Spec         config.AccountSpec
 	AccountID    string
 	Exchange     exchange.ExchangeClient
-	Mem          *memory.MemoryStore
+	Mem          memory.Store
 	ScannerState *scanner.ScannerState
 	Executor     *execution.ExecutionEngine
 	Engine       *engine.AdvisoryEngine
@@ -66,12 +66,11 @@ type AccountRuntime struct {
 func Build(
 	spec *config.AccountSpec,
 	ex exchange.ExchangeClient,
-	dataDir string,
+	mem memory.Store,
 	llmURL string,
 	llmModel string,
 	llmAPIKey string,
 ) *AccountRuntime {
-	mem := memory.NewMemoryStoreWithAccount(dataDir, spec.ID, spec.Exchange)
 	scannerState := scanner.NewScannerState()
 	executor := execution.NewExecutionEngine(ex, mem)
 	advisoryEngine := engine.NewAdvisoryEngine(llmURL, llmModel, llmAPIKey, mem)

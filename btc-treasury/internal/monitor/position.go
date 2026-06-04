@@ -18,13 +18,13 @@ type StatusTracker interface {
 }
 
 type PositionMonitor struct {
-	mem      *memory.MemoryStore
+	mem      memory.Store
 	exchange exchange.ExchangeClient
 	label    string
 	status   StatusTracker
 }
 
-func NewPositionMonitor(mem *memory.MemoryStore, ex exchange.ExchangeClient, status StatusTracker) *PositionMonitor {
+func NewPositionMonitor(mem memory.Store, ex exchange.ExchangeClient, status StatusTracker) *PositionMonitor {
 	return &PositionMonitor{
 		mem:      mem,
 		exchange: ex,
@@ -243,7 +243,7 @@ func (pm *PositionMonitor) CheckPositions(ctx context.Context) {
 }
 
 func RecordPositionFromAdvisory(
-	mem *memory.MemoryStore,
+	mem memory.Store,
 	advisory *models.FullBtcAdvisory,
 	entryPrice float64,
 	size float64,

@@ -41,11 +41,14 @@ services:
     # and scanner. State is consumed only through Telegram commands.
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data/btc-treasury:/app/data/btc-treasury
     environment:
       - DATA_BTC_DIR=/app/data/btc-treasury
       - WALLET_PASSWORD=${WALLET_PASSWORD}
+      - DB_DSN=postgres://botbtc:botbtc123@host.docker.internal:5432/dbbtcbot?sslmode=disable
     restart: unless-stopped
     networks:
       - solana-net

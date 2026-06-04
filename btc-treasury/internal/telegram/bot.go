@@ -2030,8 +2030,8 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 	for _, rt := range runtimes {
 		balances, err := rt.Exchange.GetBalances(ctx)
 		if err != nil {
-			blocks = append(blocks, fmt.Sprintf("💼 *[%s/%s]* — balance fetch failed: %v",
-				utils.EscapeMdv2(rt.AccountID), rt.Spec.Exchange, err))
+			blocks = append(blocks, fmt.Sprintf("💼 *[%s/%s]* — balance fetch failed: %s",
+				utils.EscapeMdv2(rt.AccountID), rt.Spec.Exchange, utils.EscapeMdv2(err.Error())))
 			continue
 		}
 
@@ -2256,7 +2256,7 @@ func (b *BtcBot) cmdSetCreds(ctx context.Context, bot *tgbotapi.BotAPI, chatID i
 	// Save credentials to persistent store
 	if err := rt.Mem.UpdateExchangeCredentials(apiKey, apiSecret, passphrase); err != nil {
 		log.Printf("cmdSetCreds: store update failed: %v", err)
-		_, sendErr := utils.SendMdv2Safe(bot, chatID, fmt.Sprintf("Failed to save credentials: %v", err))
+		_, sendErr := utils.SendMdv2Safe(bot, chatID, fmt.Sprintf("Failed to save credentials: %s", utils.EscapeMdv2(err.Error())))
 		return sendErr
 	}
 

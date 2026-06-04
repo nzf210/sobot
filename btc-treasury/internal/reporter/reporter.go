@@ -25,7 +25,7 @@ type PerAccountReport struct {
 	AccountID string
 	Exchange  config.ExchangeKind
 	State     *scanner.ScannerState
-	Mem       *memory.MemoryStore
+	Mem       memory.Store
 	ChatIDs   []int64
 }
 

@@ -53,6 +53,20 @@ func NewGormDBStore(driver, dsn, accountID string, exchange config.ExchangeKind)
 		return nil, fmt.Errorf("gorm: auto migrate failed: %w", err)
 	}
 
+	// Ensure parent DbAccountSpec exists to satisfy foreign key constraints in dependent tables (like account_exchanges)
+	var specCount int64
+	if err := db.Model(&models.DbAccountSpec{}).Where("id = ?", accountID).Count(&specCount).Error; err == nil && specCount == 0 {
+		placeholderSpec := models.DbAccountSpec{
+			ID:              accountID,
+			Label:           accountID,
+			TelegramChatIDs: "[]",
+			Enabled:         true,
+		}
+		if err := db.Create(&placeholderSpec).Error; err != nil {
+			return nil, fmt.Errorf("gorm: failed to create parent account spec record: %w", err)
+		}
+	}
+
 	store := &GormDBStore{
 		db:        db,
 		accountID: accountID,
@@ -565,6 +579,20 @@ func (s *GormDBStore) UpdateExchangeCredentials(apiKey, apiSecret, passphrase st
 		return fmt.Errorf("credentials: db update failed: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
+		// Ensure parent account_specs record exists to satisfy foreign key constraint
+		var specCount int64
+		if err := s.db.Model(&models.DbAccountSpec{}).Where("id = ?", s.accountID).Count(&specCount).Error; err == nil && specCount == 0 {
+			specRow := models.DbAccountSpec{
+				ID:              s.accountID,
+				Label:           s.accountID,
+				TelegramChatIDs: "[]",
+				Enabled:         true,
+			}
+			if err := s.db.Create(&specRow).Error; err != nil {
+				return fmt.Errorf("credentials: failed to create parent account spec record: %w", err)
+			}
+		}
+
 		// Row doesn't exist — create it
 		row := models.DbAccountExchange{
 			AccountID:    s.accountID,

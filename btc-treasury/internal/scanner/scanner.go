@@ -311,7 +311,7 @@ func Run(
 	ex exchange.ExchangeClient,
 	engine *engine.AdvisoryEngine,
 	executor executionEngine,
-	mem *memory.MemoryStore,
+	mem memory.Store,
 	intervalSecs uint64,
 	status StatusTracker,
 ) {
@@ -359,7 +359,7 @@ func scanPair(
 	ex exchange.ExchangeClient,
 	engine *engine.AdvisoryEngine,
 	executor executionEngine,
-	mem *memory.MemoryStore,
+	mem memory.Store,
 ) {
 	ps.Stats.Scanned.Add(1)
 

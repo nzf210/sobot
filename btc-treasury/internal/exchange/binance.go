@@ -86,6 +86,7 @@ func (c *BinanceClient) signedGet(ctx context.Context, path string, params url.V
 		for k, v := range params {
 			query[k] = v
 		}
+		query.Set("recvWindow", "60000")
 		query.Set("timestamp", strconv.FormatInt(c.timestamp(), 10))
 		signature := c.sign(query.Encode())
 		query.Set("signature", signature)
@@ -118,6 +119,7 @@ func (c *BinanceClient) signedPost(ctx context.Context, path string, params url.
 	for k, v := range params {
 		query[k] = v
 	}
+	query.Set("recvWindow", "60000")
 	query.Set("timestamp", strconv.FormatInt(c.timestamp(), 10))
 	signature := c.sign(query.Encode())
 	query.Set("signature", signature)
@@ -149,6 +151,7 @@ func (c *BinanceClient) signedDelete(ctx context.Context, path string, params ur
 	for k, v := range params {
 		query[k] = v
 	}
+	query.Set("recvWindow", "60000")
 	query.Set("timestamp", strconv.FormatInt(c.timestamp(), 10))
 	signature := c.sign(query.Encode())
 	query.Set("signature", signature)
