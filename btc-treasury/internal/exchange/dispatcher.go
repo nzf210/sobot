@@ -107,6 +107,12 @@ func (m *MultiExchangeClient) List() []AccountSummary {
 }
 
 func buildClientForSpec(spec *config.AccountSpec) (ExchangeClient, error) {
+	return BuildClientForSpec(spec)
+}
+
+// BuildClientForSpec creates an ExchangeClient from an AccountSpec. Exported so
+// callers (e.g. the Telegram bot) can hot-reload a client after credential updates.
+func BuildClientForSpec(spec *config.AccountSpec) (ExchangeClient, error) {
 	apiKey, apiSecret, passphrase, err := spec.Credentials.Resolve()
 	if err != nil {
 		return nil, err

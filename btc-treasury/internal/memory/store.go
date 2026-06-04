@@ -15,7 +15,33 @@ import (
 	"btc-treasury/internal/models"
 )
 
-type MemoryStore struct {
+// Store represents the abstract interface for storing configurations and states
+type Store interface {
+	AccountID() string
+	Exchange() config.ExchangeKind
+	GetTreasuryState() models.BtcTreasuryState
+	SaveTreasuryState(state models.BtcTreasuryState)
+	SyncInitialBalances(liveBtc, liveUsdt float64)
+	UpdateGrowthRatios()
+	ResyncAfterFill(liveBtc, liveUsdt float64)
+	DeductBalanceForBuy(pair string, quoteSpent float64)
+	LogDecision(record models.BtcDecisionRecord)
+	GetDecisions() []models.BtcDecisionRecord
+	GetConfig() models.BtcConfig
+	SaveConfig(config models.BtcConfig)
+	GetPositions() []models.BtcAdvisoryPosition
+	SavePositions(positions []models.BtcAdvisoryPosition)
+	GetLessons() []string
+	AddLesson(lesson string)
+	UpdateTreasuryOnClose(pair string, pnlPct, positionSizeQuote, btcPrice float64) bool
+	LoadSkills() string
+	LoadLessonsContext() string
+	// UpdateExchangeCredentials updates API credentials for this account/exchange.
+	// Returns error if the underlying store cannot persist (e.g. file not found).
+	UpdateExchangeCredentials(apiKey, apiSecret, passphrase string) error
+}
+
+type JSONFileStore struct {
 	dataDir    string
 	accountDir string
 	accountID  string
@@ -23,11 +49,19 @@ type MemoryStore struct {
 	lock       sync.RWMutex
 }
 
-func NewMemoryStore(dataDir string) *MemoryStore {
-	return NewMemoryStoreWithAccount(dataDir, "", "")
+func NewMemoryStore(dataDir string) Store {
+	return NewJSONFileStore(dataDir)
 }
 
-func NewMemoryStoreWithAccount(dataDir string, accountID string, exchange config.ExchangeKind) *MemoryStore {
+func NewMemoryStoreWithAccount(dataDir string, accountID string, exchange config.ExchangeKind) Store {
+	return NewJSONFileStoreWithAccount(dataDir, accountID, exchange)
+}
+
+func NewJSONFileStore(dataDir string) Store {
+	return NewJSONFileStoreWithAccount(dataDir, "", "")
+}
+
+func NewJSONFileStoreWithAccount(dataDir string, accountID string, exchange config.ExchangeKind) Store {
 	absDataDir, err := filepath.Abs(dataDir)
 	if err != nil {
 		absDataDir = dataDir
@@ -46,7 +80,7 @@ func NewMemoryStoreWithAccount(dataDir string, accountID string, exchange config
 		_ = os.MkdirAll(accountDir, 0755)
 	}
 
-	store := &MemoryStore{
+	store := &JSONFileStore{
 		dataDir:    absDataDir,
 		accountDir: accountDir,
 		accountID:  accountID,
@@ -56,15 +90,15 @@ func NewMemoryStoreWithAccount(dataDir string, accountID string, exchange config
 	return store
 }
 
-func (s *MemoryStore) AccountID() string {
+func (s *JSONFileStore) AccountID() string {
 	return s.accountID
 }
 
-func (s *MemoryStore) Exchange() config.ExchangeKind {
+func (s *JSONFileStore) Exchange() config.ExchangeKind {
 	return s.exchange
 }
 
-func (s *MemoryStore) initDefaults() {
+func (s *JSONFileStore) initDefaults() {
 	defaults := []struct {
 		filename string
 		content  string
@@ -102,7 +136,7 @@ func (s *MemoryStore) initDefaults() {
 	}
 }
 
-func (s *MemoryStore) readJSON(filename string, target interface{}) error {
+func (s *JSONFileStore) readJSON(filename string, target interface{}) error {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -114,7 +148,7 @@ func (s *MemoryStore) readJSON(filename string, target interface{}) error {
 	return json.Unmarshal(data, target)
 }
 
-func (s *MemoryStore) writeJSON(filename string, data interface{}) {
+func (s *JSONFileStore) writeJSON(filename string, data interface{}) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -145,18 +179,18 @@ func (s *MemoryStore) writeJSON(filename string, data interface{}) {
 	}
 }
 
-func (s *MemoryStore) GetTreasuryState() models.BtcTreasuryState {
+func (s *JSONFileStore) GetTreasuryState() models.BtcTreasuryState {
 	var state models.BtcTreasuryState
 	_ = s.readJSON("btc-treasury.json", &state)
 	return state
 }
 
-func (s *MemoryStore) SaveTreasuryState(state models.BtcTreasuryState) {
+func (s *JSONFileStore) SaveTreasuryState(state models.BtcTreasuryState) {
 	state.LastUpdate = time.Now().UTC().Format(time.RFC3339)
 	s.writeJSON("btc-treasury.json", &state)
 }
 
-func (s *MemoryStore) SyncInitialBalances(liveBtc, liveUsdt float64) {
+func (s *JSONFileStore) SyncInitialBalances(liveBtc, liveUsdt float64) {
 	state := s.GetTreasuryState()
 	state.CurrentBtc = liveBtc
 	state.PreviousBtc = liveBtc
@@ -166,7 +200,7 @@ func (s *MemoryStore) SyncInitialBalances(liveBtc, liveUsdt float64) {
 	log.Printf("Synced treasury with Binance balances: BTC=%.8f USDT=%.2f", liveBtc, liveUsdt)
 }
 
-func (s *MemoryStore) UpdateGrowthRatios() {
+func (s *JSONFileStore) UpdateGrowthRatios() {
 	state := s.GetTreasuryState()
 	prev := state.PreviousBtc
 	if prev > 0.0 {
@@ -177,7 +211,7 @@ func (s *MemoryStore) UpdateGrowthRatios() {
 	s.SaveTreasuryState(state)
 }
 
-func (s *MemoryStore) ResyncAfterFill(liveBtc, liveUsdt float64) {
+func (s *JSONFileStore) ResyncAfterFill(liveBtc, liveUsdt float64) {
 	state := s.GetTreasuryState()
 	if state.PreviousBtc <= 0.0 {
 		state.PreviousBtc = state.CurrentBtc
@@ -190,7 +224,7 @@ func (s *MemoryStore) ResyncAfterFill(liveBtc, liveUsdt float64) {
 	log.Printf("Treasury re-synced after fill: BTC=%.8f USDT=%.2f", liveBtc, liveUsdt)
 }
 
-func (s *MemoryStore) DeductBalanceForBuy(pair string, quoteSpent float64) {
+func (s *JSONFileStore) DeductBalanceForBuy(pair string, quoteSpent float64) {
 	if quoteSpent <= 0.0 {
 		return
 	}
@@ -208,7 +242,7 @@ func (s *MemoryStore) DeductBalanceForBuy(pair string, quoteSpent float64) {
 	s.SaveTreasuryState(state)
 }
 
-func (s *MemoryStore) LogDecision(record models.BtcDecisionRecord) {
+func (s *JSONFileStore) LogDecision(record models.BtcDecisionRecord) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -244,39 +278,39 @@ func (s *MemoryStore) LogDecision(record models.BtcDecisionRecord) {
 	}
 }
 
-func (s *MemoryStore) GetDecisions() []models.BtcDecisionRecord {
+func (s *JSONFileStore) GetDecisions() []models.BtcDecisionRecord {
 	var records []models.BtcDecisionRecord
 	_ = s.readJSON("btc-decision-log.json", &records)
 	return records
 }
 
-func (s *MemoryStore) GetConfig() models.BtcConfig {
+func (s *JSONFileStore) GetConfig() models.BtcConfig {
 	var cfg models.BtcConfig
 	_ = s.readJSON("btc-config.json", &cfg)
 	return cfg
 }
 
-func (s *MemoryStore) SaveConfig(config models.BtcConfig) {
+func (s *JSONFileStore) SaveConfig(config models.BtcConfig) {
 	s.writeJSON("btc-config.json", &config)
 }
 
-func (s *MemoryStore) GetPositions() []models.BtcAdvisoryPosition {
+func (s *JSONFileStore) GetPositions() []models.BtcAdvisoryPosition {
 	var positions []models.BtcAdvisoryPosition
 	_ = s.readJSON("btc-positions.json", &positions)
 	return positions
 }
 
-func (s *MemoryStore) SavePositions(positions []models.BtcAdvisoryPosition) {
+func (s *JSONFileStore) SavePositions(positions []models.BtcAdvisoryPosition) {
 	s.writeJSON("btc-positions.json", &positions)
 }
 
-func (s *MemoryStore) GetLessons() []string {
+func (s *JSONFileStore) GetLessons() []string {
 	var lessons []string
 	_ = s.readJSON("btc-lessons.json", &lessons)
 	return lessons
 }
 
-func (s *MemoryStore) AddLesson(lesson string) {
+func (s *JSONFileStore) AddLesson(lesson string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -312,7 +346,7 @@ func (s *MemoryStore) AddLesson(lesson string) {
 	}
 }
 
-func (s *MemoryStore) UpdateTreasuryOnClose(pair string, pnlPct, positionSizeQuote, btcPrice float64) bool {
+func (s *JSONFileStore) UpdateTreasuryOnClose(pair string, pnlPct, positionSizeQuote, btcPrice float64) bool {
 	cfg := s.GetConfig()
 	state := s.GetTreasuryState()
 	pnlMultiplier := 1.0 + (pnlPct / 100.0)
@@ -376,7 +410,7 @@ func (s *MemoryStore) UpdateTreasuryOnClose(pair string, pnlPct, positionSizeQuo
 	return true
 }
 
-func (s *MemoryStore) LoadSkills() string {
+func (s *JSONFileStore) LoadSkills() string {
 	path := filepath.Join(s.dataDir, "SKILL.md")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -385,7 +419,7 @@ func (s *MemoryStore) LoadSkills() string {
 	return string(data)
 }
 
-func (s *MemoryStore) LoadLessonsContext() string {
+func (s *JSONFileStore) LoadLessonsContext() string {
 	lessons := s.GetLessons()
 	if len(lessons) == 0 {
 		return ""
@@ -409,4 +443,107 @@ func (s *MemoryStore) LoadLessonsContext() string {
 		out += fmt.Sprintf("%d. %s\n", len(recent)-i, truncated)
 	}
 	return out
+}
+
+// UpdateExchangeCredentials updates API credentials in btc-accounts.json.
+// It reads the file, finds the matching account+exchange entry, updates the
+// credentials, and writes back atomically. If no btc-accounts.json exists
+// (legacy env-var mode), it creates a new one with the provided credentials.
+func (s *JSONFileStore) UpdateExchangeCredentials(apiKey, apiSecret, passphrase string) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// Determine path — btc-accounts.json lives in dataDir (not accountDir)
+	path := filepath.Join(s.dataDir, "btc-accounts.json")
+
+	type exchangeEntry struct {
+		Kind         string   `json:"kind"`
+		ApiKey       string   `json:"api_key"`
+		ApiSecret    string   `json:"api_secret"`
+		Passphrase   string   `json:"passphrase,omitempty"`
+		ScannerPairs []string `json:"scanner_pairs,omitempty"`
+		Enabled      bool     `json:"enabled"`
+	}
+	type accountEntry struct {
+		ID        string          `json:"id"`
+		Label     string          `json:"label,omitempty"`
+		Exchanges []exchangeEntry `json:"exchanges"`
+	}
+	type accountsFile struct {
+		Accounts []accountEntry `json:"accounts"`
+	}
+
+	var af accountsFile
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &af)
+	}
+
+	exchangeStr := string(s.exchange)
+	found := false
+	for ai := range af.Accounts {
+		if af.Accounts[ai].ID != s.accountID && s.accountID != "" && s.accountID != "default" {
+			continue
+		}
+		for ei := range af.Accounts[ai].Exchanges {
+			if af.Accounts[ai].Exchanges[ei].Kind == exchangeStr {
+				af.Accounts[ai].Exchanges[ei].ApiKey = apiKey
+				af.Accounts[ai].Exchanges[ei].ApiSecret = apiSecret
+				af.Accounts[ai].Exchanges[ei].Passphrase = passphrase
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+	}
+
+	if !found {
+		// Create or append entry
+		newEntry := exchangeEntry{
+			Kind:      exchangeStr,
+			ApiKey:    apiKey,
+			ApiSecret: apiSecret,
+			Passphrase: passphrase,
+			Enabled:   true,
+		}
+		id := s.accountID
+		if id == "" {
+			id = "default"
+		}
+		// Find existing account by ID or create new
+		accountFound := false
+		for ai := range af.Accounts {
+			if af.Accounts[ai].ID == id {
+				af.Accounts[ai].Exchanges = append(af.Accounts[ai].Exchanges, newEntry)
+				accountFound = true
+				break
+			}
+		}
+		if !accountFound {
+			af.Accounts = append(af.Accounts, accountEntry{
+				ID:        id,
+				Exchanges: []exchangeEntry{newEntry},
+			})
+		}
+	}
+
+	bytes, err := json.MarshalIndent(af, "", "  ")
+	if err != nil {
+		return fmt.Errorf("credentials: marshal failed: %w", err)
+	}
+
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, bytes, 0600); err != nil {
+		return fmt.Errorf("credentials: write tmp failed: %w", err)
+	}
+	if f, err := os.OpenFile(tmpPath, os.O_WRONLY, 0600); err == nil {
+		_ = f.Sync()
+		f.Close()
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("credentials: rename failed: %w", err)
+	}
+	return nil
 }

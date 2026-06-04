@@ -16,14 +16,20 @@ import (
 
 type ExecutionEngine struct {
 	exchange exchange.ExchangeClient
-	mem      *memory.MemoryStore
+	mem      memory.Store
 }
 
-func NewExecutionEngine(ex exchange.ExchangeClient, mem *memory.MemoryStore) *ExecutionEngine {
+func NewExecutionEngine(ex exchange.ExchangeClient, mem memory.Store) *ExecutionEngine {
 	return &ExecutionEngine{
 		exchange: ex,
 		mem:      mem,
 	}
+}
+
+// UpdateExchange hot-swaps the exchange client on a running ExecutionEngine.
+// Call this after credential updates so new orders use the fresh client.
+func (ee *ExecutionEngine) UpdateExchange(ex exchange.ExchangeClient) {
+	ee.exchange = ex
 }
 
 func (ee *ExecutionEngine) ExecuteBuy(

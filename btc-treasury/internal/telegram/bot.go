@@ -70,6 +70,7 @@ const helpText = `🤖 *BTC Treasury Accumulation*
 *Configuration*
 /btc_config — Current config \(TP/SL/thresholds\)
 /btc_setconfig \<key\> \<value\> — Update config live
+/btc_setcreds \<api\_key\> \<api\_secret\> \[passphrase\] — Update exchange API credentials live
 /btc_enable — Enable LLM advisory
 /btc_disable — Disable LLM advisory
 
@@ -160,7 +161,7 @@ type BtcBot struct {
 	token         string
 	whitelist     []int64
 	engine        *engine.AdvisoryEngine
-	mem           *memory.MemoryStore
+	mem           memory.Store
 	scanner       *scanner.ScannerState
 	perAccount    map[exchange.AccountKey]*runtime.AccountRuntime
 	activeAccount map[int64]exchange.AccountKey
@@ -171,7 +172,7 @@ func NewBtcBot(
 	token string,
 	whitelist []int64,
 	engine *engine.AdvisoryEngine,
-	mem *memory.MemoryStore,
+	mem memory.Store,
 	scanner *scanner.ScannerState,
 	perAccount map[exchange.AccountKey]*runtime.AccountRuntime,
 ) *BtcBot {
@@ -371,6 +372,8 @@ func (b *BtcBot) handleMessage(ctx context.Context, bot *tgbotapi.BotAPI, msg *t
 		err = b.cmdAccounts(ctx, bot, chatID)
 	case "btcaggregate":
 		err = b.cmdAggregate(bot, chatID)
+	case "btcsetcreds":
+		err = b.cmdSetCreds(ctx, bot, chatID, args)
 	default:
 		reply := tgbotapi.NewMessage(chatID, "Unknown command. Use /help")
 		_, _ = bot.Send(reply)
@@ -2207,4 +2210,100 @@ func validatePairToken(raw string) (string, error) {
 		return "", fmt.Errorf("'%s' is not a BTC-quote pair (must end with BTC, e.g. SOLBTC, ETHBTC)", pair)
 	}
 	return pair, nil
+}
+
+// cmdSetCreds updates API credentials for the active account/exchange.
+// Usage: /btc_setcreds <api_key> <api_secret> [passphrase]
+// OKX requires passphrase; Binance does not.
+// Credentials are saved to btc-accounts.json (JSON store) or account_exchanges table (DB store).
+// The exchange client is hot-reloaded in-memory immediately after saving.
+func (b *BtcBot) cmdSetCreds(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64, args string) error {
+	rt := b.resolveRuntime(chatID)
+	if rt == nil {
+		_, err := utils.SendMdv2Safe(bot, chatID, "No account bound. Use /btc_use first.")
+		return err
+	}
+
+	parts := strings.Fields(args)
+	if len(parts) < 2 {
+		usage := "Usage: `/btc_setcreds <api_key> <api_secret> [passphrase]`\n\n" +
+			"OKX requires passphrase. Binance does not.\n" +
+			"Example \\(Binance\\): `/btc_setcreds ABCD1234 mysecret`\n" +
+			"Example \\(OKX\\): `/btc_setcreds ABCD1234 mysecret mypassphrase`"
+		_, err := utils.SendMdv2Safe(bot, chatID, usage)
+		return err
+	}
+
+	apiKey := parts[0]
+	apiSecret := parts[1]
+	passphrase := ""
+	if len(parts) >= 3 {
+		passphrase = parts[2]
+	}
+
+	// OKX requires passphrase
+	if rt.Spec.Exchange == "okx" && passphrase == "" {
+		_, err := utils.SendMdv2Safe(bot, chatID, "OKX requires a passphrase. Usage: `/btc_setcreds <api_key> <api_secret> <passphrase>`")
+		return err
+	}
+
+	// Validate key lengths (basic sanity check)
+	if len(apiKey) < 8 || len(apiSecret) < 8 {
+		_, err := utils.SendMdv2Safe(bot, chatID, "api_key and api_secret must be at least 8 characters.")
+		return err
+	}
+
+	// Save credentials to persistent store
+	if err := rt.Mem.UpdateExchangeCredentials(apiKey, apiSecret, passphrase); err != nil {
+		log.Printf("cmdSetCreds: store update failed: %v", err)
+		_, sendErr := utils.SendMdv2Safe(bot, chatID, fmt.Sprintf("Failed to save credentials: %v", err))
+		return sendErr
+	}
+
+	// Hot-reload exchange client with new credentials
+	newSpec := rt.Spec
+	newSpec.Credentials.ApiKey = apiKey
+	newSpec.Credentials.ApiSecret = apiSecret
+	newSpec.Credentials.Passphrase = passphrase
+	newSpec.Credentials.KeyEnv = ""
+	newSpec.Credentials.SecretEnv = ""
+	newSpec.Credentials.PassphraseEnv = ""
+
+	newClient, err := exchange.BuildClientForSpec(&newSpec)
+	if err != nil {
+		log.Printf("cmdSetCreds: failed to build exchange client: %v", err)
+		_, sendErr := utils.SendMdv2Safe(bot, chatID, fmt.Sprintf(
+			"Credentials saved, but failed to reload exchange client: %v\nRestart service to apply.", err,
+		))
+		return sendErr
+	}
+
+	// Swap exchange client on the running runtime
+	rt.Exchange = newClient
+	if rt.Executor != nil {
+		rt.Executor.UpdateExchange(newClient)
+	}
+
+	// Masked display: show first 4 + last 4 chars
+	masked := func(s string) string {
+		if len(s) <= 8 {
+			return "****"
+		}
+		return s[:4] + "..." + s[len(s)-4:]
+	}
+
+	reply := fmt.Sprintf(
+		"✅ *Credentials updated \\(%s / %s\\)*\n\nAPI Key: `%s`\nAPI Secret: `%s`",
+		utils.EscapeMdv2(string(rt.Spec.Exchange)),
+		utils.EscapeMdv2(rt.AccountID),
+		utils.EscapeMdv2(masked(apiKey)),
+		utils.EscapeMdv2(masked(apiSecret)),
+	)
+	if passphrase != "" {
+		reply += fmt.Sprintf("\nPassphrase: `%s`", utils.EscapeMdv2(masked(passphrase)))
+	}
+	reply += "\n\nExchange client reloaded in\\-memory\\. Scanner will use new credentials on next cycle\\."
+
+	_, err = utils.SendMdv2Safe(bot, chatID, reply)
+	return err
 }

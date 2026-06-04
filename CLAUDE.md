@@ -341,6 +341,9 @@ BACKEND_PORT=8080 EXECUTOR_PORT=3000 docker-compose up -d
 - `/btc_history` — Last 10 decisions
 - `/btc_lessons` — Recent self-learning lessons
 
+**Credentials Management**
+- `/btc_setcreds <api_key> <api_secret> [passphrase]` — Update exchange API credentials live (OKX requires passphrase). Saves to btc-accounts.json or DB and hot-reloads exchange client immediately.
+
 ---
 
 ## BTC Treasury Usage Examples
