@@ -25,15 +25,15 @@ type cacheEntry struct {
 }
 
 type AdvisoryEngine struct {
-	llm         *llm.LlmClient
-	mem         *memory.MemoryStore
-	cache       map[string]cacheEntry
-	cacheLock   sync.RWMutex
-	lastLlmCall map[string]time.Time
+	llm          *llm.LlmClient
+	mem          memory.Store
+	cache        map[string]cacheEntry
+	cacheLock    sync.RWMutex
+	lastLlmCall  map[string]time.Time
 	cooldownLock sync.RWMutex
 }
 
-func NewAdvisoryEngine(llmURL, llmModel, llmAPIKey string, mem *memory.MemoryStore) *AdvisoryEngine {
+func NewAdvisoryEngine(llmURL, llmModel, llmAPIKey string, mem memory.Store) *AdvisoryEngine {
 	return &AdvisoryEngine{
 		llm:         llm.NewLlmClient(llmURL, llmModel, llmAPIKey),
 		mem:         mem,
@@ -164,7 +164,7 @@ func (ae *AdvisoryEngine) Analyze(ctx context.Context, input *models.BtcAdvisory
 	}
 
 	// ── EARLY-EXIT CHEAP GUARDS ──────────────────────────────────────
-	if quantDecision := QuantFastPath(&input.MarketData, &input.Treasury, opportunity, riskLevel, marketRegime, input.LossStreak); quantDecision != nil {
+	if quantDecision := QuantFastPath(&input.MarketData, &input.Treasury, opportunity, riskLevel, marketRegime, input.LossStreak, cfg.TakerFeePct); quantDecision != nil {
 		return *quantDecision
 	}
 
@@ -252,7 +252,8 @@ func (ae *AdvisoryEngine) callLLM(
 
 	aiScoreStr := "n/a"
 	if input.AiScore != nil {
-		aiScoreStr = fmt.Sprintf("%.0f", *input.AiScore)
+		// AiScore is 0-10 internally; system prompt expects 0-100 scale
+		aiScoreStr = fmt.Sprintf("%.0f", *input.AiScore*10.0)
 	}
 
 	userPrompt := fmt.Sprintf(

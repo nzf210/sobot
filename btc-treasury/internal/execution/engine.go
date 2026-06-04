@@ -42,6 +42,16 @@ func (ee *ExecutionEngine) ExecuteBuy(
 		return models.ExecutionPlan{}, errors.New("exchange not configured")
 	}
 
+	// Binance min notional: ~10 USDT for USDT-quoted, ~0.0001 BTC for BTC-quoted pairs.
+	pairUpper := strings.ToUpper(pair)
+	isBtcQuote := strings.HasSuffix(pairUpper, "BTC") && pairUpper != "BTCUSDT"
+	if isBtcQuote && quoteAmount < 0.0001 {
+		return models.ExecutionPlan{}, fmt.Errorf("order too small: %.8f BTC < 0.0001 BTC min notional for %s", quoteAmount, pair)
+	}
+	if !isBtcQuote && quoteAmount < 10.0 {
+		return models.ExecutionPlan{}, fmt.Errorf("order too small: %.2f < 10 USDT min notional for %s", quoteAmount, pair)
+	}
+
 	price, err := ee.exchange.GetCurrentPrice(ctx, pair)
 	if err != nil {
 		return models.ExecutionPlan{}, fmt.Errorf("failed to get current price: %w", err)

@@ -486,6 +486,11 @@ func (c *BinanceClient) GetMarketData(ctx context.Context, symbol string) (model
 		}
 	}
 
+	// Empty orderbook → transient connectivity issue; treat as error to avoid false SAFE_MODE
+	if bestBid <= 0.0 || bestAsk <= 0.0 {
+		return models.BtcMarketData{}, fmt.Errorf("empty orderbook for %s — skipping scan cycle", symbol)
+	}
+
 	spread := 0.0
 	if bestAsk > 0.0 {
 		spread = (bestAsk - bestBid) / bestAsk * 100.0

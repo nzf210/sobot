@@ -15,27 +15,27 @@ func QuantFastPath(
 	riskLevel string,
 	marketRegime string,
 	lossStreak int,
+	takerFeePct float64,
 ) *models.FullBtcAdvisory {
-	takerFee := 0.001
 
 	// Danger regimes first
 	if marketRegime == "LOW_LIQUIDITY_DANGER" || marketRegime == "HIGH_VOLATILITY_DANGER" || marketRegime == "PANIC_SELLOFF" {
 		mode := "SAFE_MODE"
-		adv := QuantAdvisory(data, marketRegime, "CRITICAL", nil, opportunity, mode, takerFee)
+		adv := QuantAdvisory(data, marketRegime, "CRITICAL", nil, opportunity, mode, takerFeePct)
 		return &adv
 	}
 
 	// Loss streak
 	if lossStreak >= 3 {
 		mode := TreasuryMode(data, treasury, "HIGH")
-		adv := QuantAdvisory(data, marketRegime, "HIGH", []string{"Loss streak >= 3"}, opportunity, mode, takerFee)
+		adv := QuantAdvisory(data, marketRegime, "HIGH", []string{"Loss streak >= 3"}, opportunity, mode, takerFeePct)
 		return &adv
 	}
 
 	// Clear rejection zone
 	if opportunity < 50.0 && riskLevel != "LOW" {
 		mode := TreasuryMode(data, treasury, riskLevel)
-		adv := QuantAdvisory(data, marketRegime, riskLevel, nil, opportunity, mode, takerFee)
+		adv := QuantAdvisory(data, marketRegime, riskLevel, nil, opportunity, mode, takerFeePct)
 		return &adv
 	}
 
@@ -46,28 +46,28 @@ func QuantFastPath(
 		if riskLevel == "LOW" {
 			effRisk = "MEDIUM"
 		}
-		adv := QuantAdvisory(data, marketRegime, effRisk, nil, opportunity, mode, takerFee)
+		adv := QuantAdvisory(data, marketRegime, effRisk, nil, opportunity, mode, takerFeePct)
 		return &adv
 	}
 
 	// TRENDING_BEARISH
 	if marketRegime == "TRENDING_BEARISH" {
 		mode := "REDUCE_RISK"
-		adv := QuantAdvisory(data, marketRegime, "HIGH", nil, opportunity, mode, takerFee)
+		adv := QuantAdvisory(data, marketRegime, "HIGH", nil, opportunity, mode, takerFeePct)
 		return &adv
 	}
 
 	// Strong quant signal: approve without LLM
 	if riskLevel == "LOW" && opportunity >= 80.0 && data.Confidence >= 0.85 {
 		mode := TreasuryMode(data, treasury, riskLevel)
-		adv := QuantAdvisory(data, marketRegime, riskLevel, nil, opportunity, mode, takerFee)
+		adv := QuantAdvisory(data, marketRegime, riskLevel, nil, opportunity, mode, takerFeePct)
 		return &adv
 	}
 
 	// MEDIUM risk + clear non-approval
 	if riskLevel == "MEDIUM" && opportunity < 70.0 {
 		mode := TreasuryMode(data, treasury, riskLevel)
-		adv := QuantAdvisory(data, marketRegime, riskLevel, nil, opportunity, mode, takerFee)
+		adv := QuantAdvisory(data, marketRegime, riskLevel, nil, opportunity, mode, takerFeePct)
 		return &adv
 	}
 
@@ -127,13 +127,12 @@ func AssessRisk(data *models.BtcMarketData, treasury *models.BtcTreasuryState, l
 		riskScore += 3.0
 		warnings = append(warnings, "Extreme volatility")
 	}
-	if data.DailyDrawdown > 0.03 {
+	if data.DailyDrawdown > 0.05 {
+		riskScore += 3.0
+		warnings = append(warnings, "Daily drawdown exceeding 5%")
+	} else if data.DailyDrawdown > 0.03 {
 		riskScore += 2.0
 		warnings = append(warnings, "Daily drawdown exceeding 3%")
-	}
-	if data.DailyDrawdown > 0.05 {
-		riskScore += 2.0
-		warnings = append(warnings, "Daily drawdown exceeding 5%")
 	}
 	if lossStreak >= 3 {
 		riskScore += 2.0
