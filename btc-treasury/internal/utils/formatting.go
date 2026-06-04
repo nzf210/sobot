@@ -52,7 +52,7 @@ func ChunkText(text string, maxLen int) []string {
 	lines := strings.Split(text, "\n")
 	for _, line := range lines {
 		lineRuneCount := utf8.RuneCountInString(line)
-		
+
 		needed := lineRuneCount
 		if currentLen > 0 {
 			needed = currentLen + 1 + lineRuneCount
@@ -75,10 +75,7 @@ func ChunkText(text string, maxLen int) []string {
 
 			runes := []rune(line)
 			for i := 0; i < len(runes); i += maxLen {
-				end := i + maxLen
-				if end > len(runes) {
-					end = len(runes)
-				}
+				end := min(i+maxLen, len(runes))
 				chunks = append(chunks, string(runes[i:end]))
 			}
 			continue
@@ -109,9 +106,11 @@ func SendMdv2Safe(bot *tgbotapi.BotAPI, chatID int64, text string) (*tgbotapi.Me
 
 	var lastMsg *tgbotapi.Message
 	for i, chunk := range chunks {
-		body := chunk
+		// Escape the chunk before adding to MarkdownV2 body
+		escapedChunk := EscapeMdv2(chunk)
+		body := escapedChunk
 		if total > 1 {
-			body = fmt.Sprintf("_%d/%d_\n%s", i+1, total, chunk)
+			body = fmt.Sprintf("_%d/%d_\n%s", i+1, total, escapedChunk)
 		}
 
 		msg := tgbotapi.NewMessage(chatID, body)
