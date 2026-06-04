@@ -430,16 +430,16 @@ func (b *BtcBot) cmdMarket(ctx context.Context, bot *tgbotapi.BotAPI, chatID int
 		text = fmt.Sprintf("Failed to fetch market data for %s: %v", pair, err)
 	} else {
 		text = fmt.Sprintf(
-			"*%s — %s*\nRegime: %s\nTrend: %.1f\nVolume: %.1f/10\nLiquidity: %.1f/10\nSpread: %.1f/10\nVolatility: %.1f/10\nConfidence: %.2f",
+			"*%s — %s*\nRegime: %s\nTrend: %s\nVolume: %s/10\nLiquidity: %s/10\nSpread: %s/10\nVolatility: %s/10\nConfidence: %s",
 			utils.EscapeMdv2(pair),
 			utils.EscapeMdv2(rt.Exchange.ExchangeName()),
 			utils.EscapeMdv2(data.MarketRegime),
-			data.TrendStrength,
-			data.VolumeScore,
-			data.LiquidityScore,
-			data.SpreadScore,
-			data.VolatilityScore,
-			data.Confidence,
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", data.TrendStrength)),
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", data.VolumeScore)),
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", data.LiquidityScore)),
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", data.SpreadScore)),
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", data.VolatilityScore)),
+			utils.EscapeMdv2(fmt.Sprintf("%.2f", data.Confidence)),
 		)
 	}
 	_, err = utils.SendMdv2Safe(bot, chatID, text)
@@ -488,20 +488,20 @@ func (b *BtcBot) cmdAdvisory(ctx context.Context, bot *tgbotapi.BotAPI, chatID i
 	text := fmt.Sprintf(
 		"*Advisory Result — %s*\n"+
 			"Recommendation: *%s*\n"+
-			"Confidence: %.2f\n"+
+			"Confidence: %s\n"+
 			"Risk Level: *%s*\n"+
 			"Treasury Mode: %s\n"+
 			"Market Regime: %s\n"+
-			"LLM Active: %t\n\n"+
+			"LLM Active: %s\n\n"+
 			"Reason: %s\n"+
 			"Warnings: %s",
 		utils.EscapeMdv2(pair),
 		utils.EscapeMdv2(advisory.Recommendation),
-		advisory.Confidence,
+		utils.EscapeMdv2(fmt.Sprintf("%.2f", advisory.Confidence)),
 		utils.EscapeMdv2(advisory.RiskLevel),
 		utils.EscapeMdv2(advisory.TreasuryMode),
 		utils.EscapeMdv2(advisory.MarketRegime),
-		advisory.BypassQuant,
+		utils.EscapeMdv2(fmt.Sprintf("%t", advisory.BypassQuant)),
 		utils.EscapeMdv2(advisory.Reason),
 		utils.EscapeMdv2(warningsStr),
 	)
@@ -526,37 +526,37 @@ func (b *BtcBot) cmdTreasury(bot *tgbotapi.BotAPI, chatID int64) error {
 
 	text := fmt.Sprintf(
 		"🏦 *BTC Treasury — %s*\n"+
-			"BTC Holdings: %.8f\n"+
-			"BTC Vault: %.8f\n"+
-			"Compound: %.8f\n"+
-			"Stable Value: %.2f\n"+
-			"USDT Balance: %.2f\n"+
-			"Total Trades: %d\n"+
-			"Winning Trades: %d (win %.0f%%)\n"+
-			"Losing Trades: %d\n"+
-			"Consecutive Losses: %d\n"+
-			"Growth 7d: %.2f%%\n"+
-			"Growth 30d: %.2f%%\n"+
+			"BTC Holdings: %s\n"+
+			"BTC Vault: %s\n"+
+			"Compound: %s\n"+
+			"Stable Value: %s\n"+
+			"USDT Balance: %s\n"+
+			"Total Trades: %s\n"+
+			"Winning Trades: %s \\(win %s%%\\)\n"+
+			"Losing Trades: %s\n"+
+			"Consecutive Losses: %s\n"+
+			"Growth 7d: %s%%\n"+
+			"Growth 30d: %s%%\n"+
 			"Last Update: %s\n"+
 			"Mode: %s",
 		utils.EscapeMdv2(rt.Exchange.ExchangeName()),
-		ts.CurrentBtc,
-		ts.BtcTreasuryVault,
-		ts.CompoundBalance,
-		ts.StableValue,
-		ts.UsdtBalance,
-		ts.TotalTrades,
-		ts.WinningTrades,
-		func() float64 {
+		utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CurrentBtc)),
+		utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.BtcTreasuryVault)),
+		utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CompoundBalance)),
+		utils.EscapeMdv2(fmt.Sprintf("%.2f", ts.StableValue)),
+		utils.EscapeMdv2(fmt.Sprintf("%.2f", ts.UsdtBalance)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", ts.TotalTrades)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", ts.WinningTrades)),
+		utils.EscapeMdv2(fmt.Sprintf("%.0f", func() float64 {
 			if ts.TotalTrades > 0 {
 				return float64(ts.WinningTrades) / float64(ts.TotalTrades) * 100.0
 			}
 			return 0
-		}(),
-		ts.LosingTrades,
-		ts.ConsecutiveLosses,
-		ts.BtcGrowth7d*100.0,
-		ts.BtcGrowth30d*100.0,
+		}())),
+		utils.EscapeMdv2(fmt.Sprintf("%d", ts.LosingTrades)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", ts.ConsecutiveLosses)),
+		utils.EscapeMdv2(fmt.Sprintf("%.2f", ts.BtcGrowth7d*100.0)),
+		utils.EscapeMdv2(fmt.Sprintf("%.2f", ts.BtcGrowth30d*100.0)),
 		utils.EscapeMdv2(ts.LastUpdate),
 		func() string {
 			if cfg.DryRun {
@@ -584,26 +584,26 @@ func (b *BtcBot) cmdPositions(bot *tgbotapi.BotAPI, chatID int64) error {
 	}
 
 	var lines []string
-	lines = append(lines, fmt.Sprintf("📂 *Open Positions (%d)*", len(positions)))
+	lines = append(lines, fmt.Sprintf("📂 *Open Positions \\(%s\\)*", utils.EscapeMdv2(fmt.Sprintf("%d", len(positions)))))
 	for i, p := range positions {
 		lines = append(lines, fmt.Sprintf(
-			"%d\\. *%s*\n"+
+			"%s\\. *%s*\n"+
 				"  Side: %s\n"+
-				"  Size: %.6f\n"+
-				"  Entry Price: %.8f\n"+
-				"  Current Price: %.8f\n"+
-				"  PnL BTC: %.8f\n"+
-				"  TP: %.1f%% \\(SL: %.1f%%\\)\n"+
+				"  Size: %s\n"+
+				"  Entry Price: %s\n"+
+				"  Current Price: %s\n"+
+				"  PnL BTC: %s\n"+
+				"  TP: %s%% \\(SL: %s%%\\)\n"+
 				"  Entry Time: %s",
-			i+1,
+			utils.EscapeMdv2(fmt.Sprintf("%d", i+1)),
 			utils.EscapeMdv2(p.ID),
 			utils.EscapeMdv2(p.Side),
-			p.Size,
-			p.EntryPrice,
-			p.CurrentPrice,
-			p.PnlBtc,
-			p.TakeProfitPct,
-			p.StopLossPct,
+			utils.EscapeMdv2(fmt.Sprintf("%.6f", p.Size)),
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", p.EntryPrice)),
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", p.CurrentPrice)),
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", p.PnlBtc)),
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", p.TakeProfitPct)),
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", p.StopLossPct)),
 			utils.EscapeMdv2(p.EntryTime),
 		))
 	}
@@ -653,21 +653,25 @@ func (b *BtcBot) cmdScan(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64
 
 		text := fmt.Sprintf(
 			"*%s — Scanner*\n\n"+
-				"Scans: %d \\| ✅ %d \\| 👁 %d \\| 🛡 %d \\| ❌ %d \\| ⚠️ %d\n\n"+
+				"Scans: %s \\| ✅ %s \\| 👁 %s \\| 🛡 %s \\| ❌ %s \\| ⚠️ %s\n\n"+
 				"Last Scan: %s\n"+
 				"Regime: %s\n"+
 				"Recommendation: *%s*\n"+
-				"AI Score: %s%.2f\n"+
+				"AI Score: %s%s\n"+
 				"Risk: %s\n"+
 				"%s",
 			utils.EscapeMdv2(pair),
-			snapshot.Scanned, snapshot.Approve, snapshot.Monitor,
-			snapshot.Protect, snapshot.Reject, snapshot.Errors,
+			utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Scanned)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Approve)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Monitor)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Protect)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Reject)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Errors)),
 			utils.EscapeMdv2(timeShort),
 			utils.EscapeMdv2(lastRegime),
 			utils.EscapeMdv2(lastRec),
 			bar,
-			lastConf,
+			utils.EscapeMdv2(fmt.Sprintf("%.2f", lastConf)),
 			utils.EscapeMdv2(lastRisk),
 			utils.EscapeMdv2(reasonShort),
 		)
@@ -683,7 +687,7 @@ func (b *BtcBot) cmdScan(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64
 	}
 
 	cfg := rt.Mem.GetConfig()
-	lines := []string{fmt.Sprintf("*Scanner — AI Scores (threshold: %.0f)*\n", cfg.MinScoreThreshold)}
+	lines := []string{fmt.Sprintf("*Scanner — AI Scores \\(threshold: %s\\)*\n", utils.EscapeMdv2(fmt.Sprintf("%.0f", cfg.MinScoreThreshold)))}
 	for _, s := range snapshots {
 		var icon string
 		switch s.LastRecommendation {
@@ -703,17 +707,17 @@ func (b *BtcBot) cmdScan(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64
 
 		bar := scoreBar(s.LastConfidence)
 		lines = append(lines, fmt.Sprintf(
-			"%s %s — AI: %s%.2f \\| %s \\| %s",
-			icon,
+			"%s %s — AI: %s%s \\| %s \\| %s",
+			utils.EscapeMdv2(icon),
 			utils.EscapeMdv2(s.Pair),
 			bar,
-			s.LastConfidence,
+			utils.EscapeMdv2(fmt.Sprintf("%.2f", s.LastConfidence)),
 			utils.EscapeMdv2(s.LastRecommendation),
 			utils.EscapeMdv2(s.LastRiskLevel),
 		))
 	}
 
-	lines = append(lines, "", "ℹ️ Score ≥ 80 = AMBIL POSISI | < 80 = DO NOTHING")
+	lines = append(lines, "", "ℹ️ Score ≥ 80 \\= AMBIL POSISI \\| < 80 \\= DO NOTHING")
 	_, err := utils.SendMdv2Safe(bot, chatID, strings.Join(lines, "\n"))
 	return err
 }
@@ -732,9 +736,9 @@ func (b *BtcBot) cmdPairs(bot *tgbotapi.BotAPI, chatID int64) error {
 	}
 
 	var lines []string
-	lines = append(lines, fmt.Sprintf("🔍 *Scanned Pairs (%d)*\n", len(pairs)))
+	lines = append(lines, fmt.Sprintf("🔍 *Scanned Pairs \\(%s\\)*\n", utils.EscapeMdv2(fmt.Sprintf("%d", len(pairs)))))
 	for i, p := range pairs {
-		lines = append(lines, fmt.Sprintf("%d\\. `%s`", i+1, utils.EscapeMdv2(p)))
+		lines = append(lines, fmt.Sprintf("%s\\. `%s`", utils.EscapeMdv2(fmt.Sprintf("%d", i+1)), utils.EscapeMdv2(p)))
 	}
 
 	_, err := utils.SendMdv2Safe(bot, chatID, strings.Join(lines, "\n"))
@@ -867,10 +871,13 @@ func (b *BtcBot) cmdAddPairs(ctx context.Context, bot *tgbotapi.BotAPI, chatID i
 	}
 
 	text := fmt.Sprintf(
-		"*Add Multiple Pairs — [%s]*\n\n%s\n\n*Summary:* %d added, %d duplicates, %d not found, %d invalid",
+		"*Add Multiple Pairs — [%s]*\n\n%s\n\n*Summary:* %s added, %s duplicates, %s not found, %s invalid",
 		utils.EscapeMdv2(rt.Exchange.ExchangeName()),
 		strings.Join(lines, "\n"),
-		added, dupes, notFound, invalid,
+		utils.EscapeMdv2(fmt.Sprintf("%d", added)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", dupes)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", notFound)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", invalid)),
 	)
 	_, err = utils.SendMdv2Safe(bot, chatID, text)
 	return err
@@ -985,26 +992,26 @@ func (b *BtcBot) cmdPairInfo(ctx context.Context, bot *tgbotapi.BotAPI, chatID i
 
 	text := fmt.Sprintf(
 		"*%s — AI Scores*\n\n"+
-			"*Overall:* %s%.2f / 100\n"+
-			"Threshold: %.0f\n"+
+			"*Overall:* %s%s / 100\n"+
+			"Threshold: %s\n"+
 			"Decision: *%s*\n\n"+
 			"*Scanner Stats*\n"+
-			"Total Scans: %d\n"+
-			"✅ Approve: %d | 👁 Monitor: %d | 🛡 Protect: %d | ❌ Reject: %d\n\n"+
-			"*Last Scan (%s)*\n"+
+			"Total Scans: %s\n"+
+			"✅ Approve: %s \\| 👁 Monitor: %s \\| 🛡 Protect: %s \\| ❌ Reject: %s\n\n"+
+			"*Last Scan \\(%s\\)*\n"+
 			"Regime: %s\n"+
 			"Risk: %s\n"+
 			"Reason: %s",
 		utils.EscapeMdv2(pair),
 		bar,
-		lastConf,
-		cfg.MinScoreThreshold,
+		utils.EscapeMdv2(fmt.Sprintf("%.2f", lastConf)),
+		utils.EscapeMdv2(fmt.Sprintf("%.0f", cfg.MinScoreThreshold)),
 		utils.EscapeMdv2(lastRec),
-		snapshot.Scanned,
-		snapshot.Approve,
-		snapshot.Monitor,
-		snapshot.Protect,
-		snapshot.Reject,
+		utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Scanned)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Approve)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Monitor)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Protect)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", snapshot.Reject)),
 		utils.EscapeMdv2(timeShort),
 		utils.EscapeMdv2(lastRegime),
 		utils.EscapeMdv2(lastRisk),
@@ -1049,14 +1056,14 @@ func (b *BtcBot) cmdHistory(bot *tgbotapi.BotAPI, chatID int64) error {
 		}
 
 		lines = append(lines, fmt.Sprintf(
-			"%d\\. `%s` *%s* %s %s \\(conf: %.2f, score: %.0f\\)\n  \\_`%s`",
-			count+1,
+			"%s\\. `%s` *%s* %s %s \\(conf: %.2f, score: %s\\)\n  \\_`%s`",
+			utils.EscapeMdv2(fmt.Sprintf("%d", count+1)),
 			utils.EscapeMdv2(timeShort),
 			utils.EscapeMdv2(d.MarketData.Pair),
-			icon,
+			utils.EscapeMdv2(icon),
 			utils.EscapeMdv2(d.Advisory.Recommendation),
 			d.Advisory.Confidence,
-			d.Advisory.OpportunityScore,
+			utils.EscapeMdv2(fmt.Sprintf("%.0f", d.Advisory.OpportunityScore)),
 			utils.EscapeMdv2(d.Advisory.Reason),
 		))
 		count++
@@ -1089,7 +1096,7 @@ func (b *BtcBot) cmdLessons(bot *tgbotapi.BotAPI, chatID int64) error {
 		if len(lesson) > 150 {
 			short = lesson[:147] + "..."
 		}
-		lines = append(lines, fmt.Sprintf("%d\\. %s", count+1, utils.EscapeMdv2(short)))
+		lines = append(lines, fmt.Sprintf("%s\\. %s", utils.EscapeMdv2(fmt.Sprintf("%d", count+1)), utils.EscapeMdv2(short)))
 		count++
 	}
 
@@ -1118,10 +1125,10 @@ func (b *BtcBot) cmdConfig(bot *tgbotapi.BotAPI, chatID int64) error {
 			"Exchange: %s\n"+
 			"Mode: %s\n"+
 			"Initial Capital: ${%s}\n"+
-			"Max Positions: %d\n"+
+			"Max Positions: %s\n"+
 			"Risk/Trade: %.1f%%\n\n"+
 			"*Thresholds*\n"+
-			"AI Score Threshold: %.0f (>= 80 = AMBIL POSISI)\n"+
+			"AI Score Threshold: %s \\(>= 80 = AMBIL POSISI\\)\n"+
 			"Min Confidence: %.2f\n"+
 			"Max Exposure: %.2f\n\n"+
 			"*Entry/Exit*\n"+
@@ -1132,15 +1139,15 @@ func (b *BtcBot) cmdConfig(bot *tgbotapi.BotAPI, chatID int64) error {
 			"Compound: %.0f%%\n"+
 			"BTC Vault: %.0f%%\n\n"+
 			"*Risk Controls*\n"+
-			"Max Consecutive Losses: %d\n"+
+			"Max Consecutive Losses: %s\n"+
 			"Daily Loss Limit: %.8f BTC\n"+
 			"Pause on Drawdown > 10%%\n\n"+
 			"*Scanner*\n"+
-			"Pairs: %d\n"+
-			"Win Rate: %.1f%%\n"+
+			"Pairs: %s\n"+
+			"Win Rate: %s%%\n"+
 			"Paused Until: %s",
 		utils.EscapeMdv2(rt.AccountID),
-		rt.Spec.Exchange,
+		utils.EscapeMdv2(string(rt.Spec.Exchange)),
 		utils.EscapeMdv2(rt.Exchange.ExchangeName()),
 		func() string {
 			if cfg.DryRun {
@@ -1149,9 +1156,9 @@ func (b *BtcBot) cmdConfig(bot *tgbotapi.BotAPI, chatID int64) error {
 			return "🔴 LIVE"
 		}(),
 		utils.EscapeMdv2(fmt.Sprintf("%.2f", cfg.InitialCapitalUsdt)),
-		cfg.MaxPositions,
+		utils.EscapeMdv2(fmt.Sprintf("%d", cfg.MaxPositions)),
 		cfg.RiskPerTradePct*100.0,
-		cfg.MinScoreThreshold,
+		utils.EscapeMdv2(fmt.Sprintf("%.0f", cfg.MinScoreThreshold)),
 		cfg.MinConfidence,
 		cfg.MaxExposure,
 		cfg.TakeProfitPct,
@@ -1165,10 +1172,10 @@ func (b *BtcBot) cmdConfig(bot *tgbotapi.BotAPI, chatID int64) error {
 		}(),
 		cfg.CompoundPct*100.0,
 		cfg.TreasuryPct*100.0,
-		cfg.MaxConsecutiveLosses,
+		utils.EscapeMdv2(fmt.Sprintf("%d", cfg.MaxConsecutiveLosses)),
 		cfg.DailyLossLimitBtc,
-		len(cfg.ScannerPairs),
-		winRate,
+		utils.EscapeMdv2(fmt.Sprintf("%d", len(cfg.ScannerPairs))),
+		utils.EscapeMdv2(fmt.Sprintf("%.1f", winRate)),
 		func() string {
 			if ts.TradingPausedUntil == "" {
 				return "—"
@@ -1490,8 +1497,12 @@ func (b *BtcBot) cmdBuy(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64,
 		}
 		monitor.RecordPositionFromAdvisory(rt.Mem, &advisory, currentPrice, baseSize, pair, "buy")
 
-		reply := fmt.Sprintf("🧪 *DRY RUN — Simulated Buy*\nPair: %s\nSize: %.6f\nTP: %.1f%% | SL: %.1f%%\nReason: %s",
-			utils.EscapeMdv2(pair), size, advisory.DynamicTakeProfit, advisory.DynamicStopLoss, utils.EscapeMdv2(advisory.TpReason))
+		reply := fmt.Sprintf("🧪 *DRY RUN — Simulated Buy*\nPair: %s\nSize: %s\nTP: %s%% \\| SL: %s%%\nReason: %s",
+			utils.EscapeMdv2(pair),
+			utils.EscapeMdv2(fmt.Sprintf("%.6f", size)),
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", advisory.DynamicTakeProfit)),
+			utils.EscapeMdv2(fmt.Sprintf("%.1f", advisory.DynamicStopLoss)),
+			utils.EscapeMdv2(advisory.TpReason))
 		_, err = utils.SendMdv2Safe(bot, chatID, reply)
 		return err
 	}
@@ -1558,21 +1569,21 @@ func (b *BtcBot) cmdBuy(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64,
 		"✅ *Order Placed — %s*\n"+
 			"Pair: %s\n"+
 			"Side: BUY\n"+
-			"Size: %.6f\n"+
+			"Size: %s\n"+
 			"Order ID: %s\n"+
 			"Status: %s\n\n"+
 			"*Dynamic TP/SL from LLM:*\n"+
-			"Take Profit: %.1f%% — %s\n"+
-			"Stop Loss: %.1f%% — %s",
-		rt.Exchange.ExchangeName(),
-		pair,
-		size,
-		buyResult.OrderID,
-		buyResult.Status,
-		advisory.DynamicTakeProfit,
-		advisory.TpReason,
-		advisory.DynamicStopLoss,
-		advisory.SlReason,
+			"Take Profit: %s%% — %s\n"+
+			"Stop Loss: %s%% — %s",
+		utils.EscapeMdv2(rt.Exchange.ExchangeName()),
+		utils.EscapeMdv2(pair),
+		utils.EscapeMdv2(fmt.Sprintf("%.6f", size)),
+		utils.EscapeMdv2(buyResult.OrderID),
+		utils.EscapeMdv2(buyResult.Status),
+		utils.EscapeMdv2(fmt.Sprintf("%.1f", advisory.DynamicTakeProfit)),
+		utils.EscapeMdv2(advisory.TpReason),
+		utils.EscapeMdv2(fmt.Sprintf("%.1f", advisory.DynamicStopLoss)),
+		utils.EscapeMdv2(advisory.SlReason),
 	)
 
 	if buyResult.Status == "filled" || buyResult.Status == "new" {
@@ -1621,7 +1632,7 @@ func (b *BtcBot) cmdSell(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64
 			if rt.Mem.UpdateTreasuryOnClose(pos.ID, pos.PnlBtc, pos.EntryPrice*pos.Size, btcPrice) {
 				lesson := fmt.Sprintf("[BTC][MANUAL][DRY RUN] %s: PnL %.2f%%. Size: %.6f. Manual close.", pos.ID, pos.PnlBtc, pos.Size)
 				rt.Mem.AddLesson(lesson)
-				results = append(results, fmt.Sprintf("%s — PnL: %.2f%%", utils.EscapeMdv2(pos.ID), pos.PnlBtc))
+				results = append(results, fmt.Sprintf("%s — PnL: %s%%", utils.EscapeMdv2(pos.ID), utils.EscapeMdv2(fmt.Sprintf("%.2f", pos.PnlBtc))))
 			} else {
 				results = append(results, fmt.Sprintf("%s — DRY RUN recorded (missing BTC price)", utils.EscapeMdv2(pos.ID)))
 			}
@@ -1640,14 +1651,18 @@ func (b *BtcBot) cmdSell(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64
 			rt.Mem.UpdateTreasuryOnClose(pos.ID, pos.PnlBtc, pos.EntryPrice*pos.Size, btcPrice)
 			lesson := fmt.Sprintf("[BTC][MANUAL] %s: PnL %.2f%%. Size: %.6f. Manual close.", pos.ID, pos.PnlBtc, pos.Size)
 			rt.Mem.AddLesson(lesson)
-			results = append(results, fmt.Sprintf("✅ %s closed — %.6f @ %s | PnL: %.2f%%", utils.EscapeMdv2(pos.ID), pos.Size, order.OrderID, pos.PnlBtc))
+			results = append(results, fmt.Sprintf("✅ %s closed — %s @ %s \\| PnL: %s%%",
+					utils.EscapeMdv2(pos.ID),
+					utils.EscapeMdv2(fmt.Sprintf("%.6f", pos.Size)),
+					utils.EscapeMdv2(order.OrderID),
+					utils.EscapeMdv2(fmt.Sprintf("%.2f", pos.PnlBtc))))
 		} else {
 			results = append(results, fmt.Sprintf("❌ %s failed: %v", utils.EscapeMdv2(pos.ID), err))
 		}
 	}
 
 	rt.Mem.SavePositions([]models.BtcAdvisoryPosition{})
-	reply := fmt.Sprintf("*Close Results — %s*\n\n%s", rt.Exchange.ExchangeName(), strings.Join(results, "\n"))
+	reply := fmt.Sprintf("*Close Results — %s*\n\n%s", utils.EscapeMdv2(rt.Exchange.ExchangeName()), strings.Join(results, "\n"))
 	_, err := utils.SendMdv2Safe(bot, chatID, reply)
 	return err
 }
@@ -1709,7 +1724,11 @@ func (b *BtcBot) cmdClose(ctx context.Context, bot *tgbotapi.BotAPI, chatID int6
 		positions = append(positions[:idx], positions[idx+1:]...)
 		rt.Mem.SavePositions(positions)
 
-		reply := fmt.Sprintf("🧪 *DRY RUN* — Simulated close\n✅ #%d %s — size: %.6f | PnL: %.2f%%", idx+1, utils.EscapeMdv2(pair), size, pnlPct)
+		reply := fmt.Sprintf("🧪 *DRY RUN* — Simulated close\n✅ \\#%s %s — size: %s \\| PnL: %s%%",
+			utils.EscapeMdv2(fmt.Sprintf("%d", idx+1)),
+			utils.EscapeMdv2(pair),
+			utils.EscapeMdv2(fmt.Sprintf("%.6f", size)),
+			utils.EscapeMdv2(fmt.Sprintf("%.2f", pnlPct)))
 		_, err = utils.SendMdv2Safe(bot, chatID, reply)
 		return err
 	}
@@ -1725,7 +1744,11 @@ func (b *BtcBot) cmdClose(ctx context.Context, bot *tgbotapi.BotAPI, chatID int6
 		positions = append(positions[:idx], positions[idx+1:]...)
 		rt.Mem.SavePositions(positions)
 
-		reply := fmt.Sprintf("✅ #%d %s closed — %s | PnL: %.2f%%", idx+1, utils.EscapeMdv2(pair), result.OrderID, pnlPct)
+		reply := fmt.Sprintf("✅ \\#%s %s closed — %s \\| PnL: %s%%",
+			utils.EscapeMdv2(fmt.Sprintf("%d", idx+1)),
+			utils.EscapeMdv2(pair),
+			utils.EscapeMdv2(result.OrderID),
+			utils.EscapeMdv2(fmt.Sprintf("%.2f", pnlPct)))
 		_, err = utils.SendMdv2Safe(bot, chatID, reply)
 		return err
 	}
@@ -1943,11 +1966,12 @@ func (b *BtcBot) cmdAccounts(ctx context.Context, bot *tgbotapi.BotAPI, chatID i
 		}
 
 		lines = append(lines, fmt.Sprintf(
-			"%s *%s/%s* — `%s`\n     BTC: %.8f | USDT: %.2f",
+			"%s *%s/%s* — `%s`\n     BTC: %s \\| USDT: %s",
 			marker,
 			utils.EscapeMdv2(key.AccountID), key.Exchange,
 			utils.EscapeMdv2(api),
-			btc, usdt,
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", btc)),
+			utils.EscapeMdv2(fmt.Sprintf("%.2f", usdt)),
 		))
 	}
 
@@ -1995,12 +2019,12 @@ func (b *BtcBot) cmdAggregate(bot *tgbotapi.BotAPI, chatID int64) error {
 		}
 
 		lines = append(lines, fmt.Sprintf(
-			"*%s/%s*: BTC %.8f | Vault %.8f | Trades %d (win %.0f%%)",
+			"*%s/%s*: BTC %s \\| Vault %s \\| Trades %s \\(win %s%%\\)",
 			utils.EscapeMdv2(key.AccountID), key.Exchange,
-			ts.CurrentBtc,
-			ts.BtcTreasuryVault,
-			ts.TotalTrades,
-			winRate,
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CurrentBtc)),
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.BtcTreasuryVault)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", ts.TotalTrades)),
+			utils.EscapeMdv2(fmt.Sprintf("%.0f", winRate)),
 		))
 	}
 
@@ -2010,8 +2034,12 @@ func (b *BtcBot) cmdAggregate(bot *tgbotapi.BotAPI, chatID int64) error {
 	}
 
 	lines = append(lines, "", fmt.Sprintf(
-		"*Total*\nBTC: %.8f\nVault: %.8f\nCompound: %.8f\nTrades: %d (win %.0f%%)",
-		totalBTC, totalVault, totalCompound, totalTrades, overallWR,
+		"*Total*\nBTC: %s\nVault: %s\nCompound: %s\nTrades: %s \\(win %s%%\\)",
+		utils.EscapeMdv2(fmt.Sprintf("%.8f", totalBTC)),
+		utils.EscapeMdv2(fmt.Sprintf("%.8f", totalVault)),
+		utils.EscapeMdv2(fmt.Sprintf("%.8f", totalCompound)),
+		utils.EscapeMdv2(fmt.Sprintf("%d", totalTrades)),
+		utils.EscapeMdv2(fmt.Sprintf("%.0f", overallWR)),
 	))
 
 	_, err := utils.SendMdv2Safe(bot, chatID, strings.Join(lines, "\n"))
@@ -2078,9 +2106,9 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 			}
 			restartTxt := ""
 			if restarts > 0 {
-				restartTxt = fmt.Sprintf(" \\| ⚠️ Restarts: %d", restarts)
+				restartTxt = fmt.Sprintf(" \\| ⚠️ Restarts: %s", utils.EscapeMdv2(fmt.Sprintf("%d", restarts)))
 			}
-			heartbeatLine = fmt.Sprintf("Health: ✅ Last tick %ds ago%s", ageSecs, restartTxt)
+			heartbeatLine = fmt.Sprintf("Health: ✅ Last tick %sd ago%s", utils.EscapeMdv2(fmt.Sprintf("%d", ageSecs)), restartTxt)
 		}
 
 		lines := []string{
@@ -2094,13 +2122,19 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 			}()),
 			fmt.Sprintf("API Key: `%s`", utils.EscapeMdv2(rt.Exchange.APIKeyDisplay())),
 			heartbeatLine,
-			fmt.Sprintf("%s: %.2f free \\| %.2f locked", stableAsset, stableFree, stableLocked),
+			fmt.Sprintf("%s: %s free \\| %s locked",
+				utils.EscapeMdv2(stableAsset),
+				utils.EscapeMdv2(fmt.Sprintf("%.2f", stableFree)),
+				utils.EscapeMdv2(fmt.Sprintf("%.2f", stableLocked))),
 			"",
 			"🏦 *BTC Treasury*",
-			fmt.Sprintf("BTC Holdings: %.8f", ts.CurrentBtc),
-			fmt.Sprintf("BTC Vault: %.8f", ts.BtcTreasuryVault),
-			fmt.Sprintf("Compound: %.8f", ts.CompoundBalance),
-			fmt.Sprintf("Trades: %d \\| Win: %d \\| Loss: %d", ts.TotalTrades, ts.WinningTrades, ts.LosingTrades),
+			fmt.Sprintf("BTC Holdings: %s", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CurrentBtc))),
+			fmt.Sprintf("BTC Vault: %s", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.BtcTreasuryVault))),
+			fmt.Sprintf("Compound: %s", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CompoundBalance))),
+			fmt.Sprintf("Trades: %s \\| Win: %s \\| Loss: %s",
+				utils.EscapeMdv2(fmt.Sprintf("%d", ts.TotalTrades)),
+				utils.EscapeMdv2(fmt.Sprintf("%d", ts.WinningTrades)),
+				utils.EscapeMdv2(fmt.Sprintf("%d", ts.LosingTrades))),
 		}
 
 		if ts.TradingPausedUntil != "" {
@@ -2111,7 +2145,10 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 		for _, b := range balances {
 			if b.Asset != "USDT" && b.Asset != "USDC" {
 				if b.Free > 0 || b.Locked > 0 {
-					otherLines = append(otherLines, fmt.Sprintf("%s: %.8f free \\| %.8f locked", utils.EscapeMdv2(b.Asset), b.Free, b.Locked))
+					otherLines = append(otherLines, fmt.Sprintf("%s: %s free \\| %s locked",
+						utils.EscapeMdv2(b.Asset),
+						utils.EscapeMdv2(fmt.Sprintf("%.8f", b.Free)),
+						utils.EscapeMdv2(fmt.Sprintf("%.8f", b.Locked))))
 				}
 			}
 		}
@@ -2133,13 +2170,13 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 			lines = append(lines, "", "*Open Orders:*")
 			for _, o := range allOrders {
 				lines = append(lines, fmt.Sprintf(
-					"%s %s: %.8f @ %.8f \\| TP: %.1f%% \\| SL: %.1f%%",
+					"%s %s: %s @ %s \\| TP: %s%% \\| SL: %s%%",
 					utils.EscapeMdv2(o.Side),
 					utils.EscapeMdv2(o.ID),
-					o.Size,
-					o.EntryPrice,
-					o.TakeProfitPct,
-					o.StopLossPct,
+					utils.EscapeMdv2(fmt.Sprintf("%.8f", o.Size)),
+					utils.EscapeMdv2(fmt.Sprintf("%.8f", o.EntryPrice)),
+					utils.EscapeMdv2(fmt.Sprintf("%.1f", o.TakeProfitPct)),
+					utils.EscapeMdv2(fmt.Sprintf("%.1f", o.StopLossPct)),
 				))
 			}
 		}
@@ -2153,9 +2190,13 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 			overallWR = float64(aggWins) / float64(aggTrades) * 100.0
 		}
 		footer := fmt.Sprintf(
-			"\n──────────\n*Aggregate — [%s]*\nBTC: %.8f \\| Vault: %.8f \\| Compound: %.8f \\| Trades: %d (win %.0f%%)",
+			"\n──────────\n*Aggregate — [%s]*\nBTC: %s \\| Vault: %s \\| Compound: %s \\| Trades: %s \\(win %s%%\\)",
 			utils.EscapeMdv2(runtimes[0].AccountID),
-			aggBtc, aggVault, aggCompound, aggTrades, overallWR,
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", aggBtc)),
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", aggVault)),
+			utils.EscapeMdv2(fmt.Sprintf("%.8f", aggCompound)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", aggTrades)),
+			utils.EscapeMdv2(fmt.Sprintf("%.0f", overallWR)),
 		)
 		blocks = append(blocks, footer)
 	}

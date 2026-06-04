@@ -177,8 +177,10 @@ func Run(
 					}
 
 					aggregateMsg := fmt.Sprintf(
-						"\n──────────\n*Aggregate — All Bindings*\nBTC: %.8f \\| Vault: %.8f \\| Trades: %d",
-						totalBTC, totalVault, totalTrades,
+						"\n──────────\n*Aggregate — All Bindings*\nBTC: %s \\| Vault: %s \\| Trades: %s",
+						utils.EscapeMdv2(fmt.Sprintf("%.8f", totalBTC)),
+						utils.EscapeMdv2(fmt.Sprintf("%.8f", totalVault)),
+						utils.EscapeMdv2(fmt.Sprintf("%d", totalTrades)),
 					)
 
 					for _, chatID := range firstEntry.ChatIDs {
@@ -243,10 +245,16 @@ func formatReport(
 			}
 		}
 
+		// Escape numbers for MarkdownV2
 		lines = append(lines, fmt.Sprintf(
-			"Pairs: %d \\| Scans: %d \\| Errors: %d\n✅ %d \\| 👁 %d \\| 🛡 %d \\| ❌ %d\n",
-			len(snapshots), totalScanned, totalErrors,
-			approveCnt, monitorCnt, protectCnt, rejectCnt,
+			"Pairs: %s \\| Scans: %s \\| Errors: %s\n✅ %s \\| 👁 %s \\| 🛡 %s \\| ❌ %s\n",
+			utils.EscapeMdv2(fmt.Sprintf("%d", len(snapshots))),
+			utils.EscapeMdv2(fmt.Sprintf("%d", totalScanned)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", totalErrors)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", approveCnt)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", monitorCnt)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", protectCnt)),
+			utils.EscapeMdv2(fmt.Sprintf("%d", rejectCnt)),
 		))
 
 		if len(snapshots) <= pairDetailThreshold {
@@ -268,12 +276,12 @@ func formatReport(
 				}
 
 				lines = append(lines, fmt.Sprintf(
-					"%s %s %d scans \\| %s \\(conf: %.2f\\)",
-					icon,
+					"%s %s %s scans \\| %s \\(conf: %s\\)",
+					utils.EscapeMdv2(icon),
 					utils.EscapeMdv2(s.Pair),
-					s.Stats.Scanned,
+					utils.EscapeMdv2(fmt.Sprintf("%d", s.Stats.Scanned)),
 					utils.EscapeMdv2(s.LastRecommendation),
-					s.LastConfidence,
+					utils.EscapeMdv2(fmt.Sprintf("%.2f", s.LastConfidence)),
 				))
 			}
 		} else {
@@ -297,9 +305,9 @@ func formatReport(
 				for i := 0; i < limit; i++ {
 					s := approvePairs[i]
 					lines = append(lines, fmt.Sprintf(
-						"✅ %s conf:%.2f",
+						"✅ %s conf:%s",
 						utils.EscapeMdv2(s.Pair),
-						s.LastConfidence,
+						utils.EscapeMdv2(fmt.Sprintf("%.2f", s.LastConfidence)),
 					))
 				}
 			}
