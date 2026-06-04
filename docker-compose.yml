@@ -34,21 +34,21 @@ services:
     networks:
       - solana-net
 
+  # ── BTC Treasury (headless worker) ─────────────────────────────────────────
+  # Connects to an external PostgreSQL instance via DB_DSN from .env
   btc-treasury:
     build: ./btc-treasury
     container_name: solana-hybrid-btc-treasury
-    # No exposed ports — runs as a headless worker driving the BTC Telegram bot
-    # and scanner. State is consumed only through Telegram commands.
+    # No exposed ports — driven entirely via Telegram commands and background loops.
     env_file:
       - .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./data/btc-treasury:/app/data/btc-treasury
     environment:
       - DATA_BTC_DIR=/app/data/btc-treasury
-      - WALLET_PASSWORD=${WALLET_PASSWORD}
-      - DB_DSN=postgres://botbtc:botbtc123@shared-postgres-db:5432/dbbtcbot?sslmode=disable
+      # DB_DRIVER and DB_DSN must be set in .env pointing to your external PostgreSQL
+      - DB_DRIVER=${DB_DRIVER:-postgres}
+      - DB_DSN=${DB_DSN}
     restart: unless-stopped
     networks:
       - solana-net
@@ -57,3 +57,5 @@ services:
 networks:
   solana-net:
     driver: bridge
+  shared-db-network:
+    external: true
