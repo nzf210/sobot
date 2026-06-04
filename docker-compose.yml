@@ -48,10 +48,11 @@ services:
     environment:
       - DATA_BTC_DIR=/app/data/btc-treasury
       - WALLET_PASSWORD=${WALLET_PASSWORD}
-      - DB_DSN=postgres://botbtc:botbtc123@host.docker.internal:5432/dbbtcbot?sslmode=disable
+      - DB_DSN=postgres://botbtc:botbtc123@shared-postgres-db:5432/dbbtcbot?sslmode=disable
     restart: unless-stopped
     networks:
       - solana-net
+      - shared-db-network
 
 networks:
   solana-net:
