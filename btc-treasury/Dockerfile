@@ -1,13 +1,12 @@
-FROM rust:1.95-slim-bookworm AS builder
+FROM golang:1.24-alpine AS builder
 WORKDIR /app
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
-COPY Cargo.toml Cargo.lock ./
-COPY src/ src/
-RUN cargo build --release
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o btc-treasury ./cmd/btc-treasury
 
-FROM debian:bookworm-slim
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
 WORKDIR /app
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/btc-treasury .
-EXPOSE 8090
+COPY --from=builder /app/btc-treasury .
 CMD ["./btc-treasury"]
