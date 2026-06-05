@@ -38,6 +38,7 @@ type DbAccountConfig struct {
 	AccountID              string    `gorm:"primaryKey;size:50"`
 	ExchangeKind           string    `gorm:"primaryKey;size:20"`
 	Enabled                bool      `gorm:"default:true;not null"`
+	LLMEnabled             bool      `gorm:"default:true;not null"`
 	DryRun                 bool      `gorm:"default:true;not null"`
 	LlmActivationThreshold float64   `gorm:"not null"`
 	MinConfidence          float64   `gorm:"not null"`

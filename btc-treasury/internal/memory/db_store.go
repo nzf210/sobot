@@ -245,6 +245,7 @@ func (s *GormDBStore) GetDecisions() []models.BtcDecisionRecord {
 func (s *GormDBStore) defaultBtcConfig() models.BtcConfig {
 	return models.BtcConfig{
 		Enabled:                true,
+		LLMEnabled:             true,
 		LlmActivationThreshold: 0.85,
 		MinConfidence:          0.80,
 		MaxExposure:            0.50,
@@ -290,6 +291,7 @@ func (s *GormDBStore) GetConfig() models.BtcConfig {
 
 	return models.BtcConfig{
 		Enabled:                dbCfg.Enabled,
+		LLMEnabled:             dbCfg.LLMEnabled,
 		LlmActivationThreshold: dbCfg.LlmActivationThreshold,
 		MinConfidence:          dbCfg.MinConfidence,
 		MaxExposure:            dbCfg.MaxExposure,
@@ -320,6 +322,7 @@ func (s *GormDBStore) SaveConfig(config models.BtcConfig) {
 		ExchangeKind:           string(s.exchange),
 		Enabled:                config.Enabled,
 		DryRun:                 config.DryRun,
+		LLMEnabled:             config.LLMEnabled,
 		LlmActivationThreshold: config.LlmActivationThreshold,
 		MinConfidence:          config.MinConfidence,
 		MaxExposure:            config.MaxExposure,

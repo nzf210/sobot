@@ -185,7 +185,8 @@ func (ae *AdvisoryEngine) Analyze(ctx context.Context, input *models.BtcAdvisory
 		return QuantAdvisory(&input.MarketData, marketRegime, riskLevel, warnings, opportunity, treasuryMode, cfg.TakerFeePct)
 	}
 
-	if !cfg.Enabled {
+	if !cfg.LLMEnabled {
+		log.Printf("BTC [%s]: LLM disabled, returning quant fallback", input.MarketData.Pair)
 		return QuantAdvisory(&input.MarketData, marketRegime, riskLevel, warnings, opportunity, treasuryMode, cfg.TakerFeePct)
 	}
 

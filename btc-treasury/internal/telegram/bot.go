@@ -538,7 +538,8 @@ func (b *BtcBot) cmdTreasury(bot *tgbotapi.BotAPI, chatID int64) error {
 			"Growth 7d: %s%%\n"+
 			"Growth 30d: %s%%\n"+
 			"Last Update: %s\n"+
-			"Mode: %s",
+			"Mode: %s\n"+
+			"LLM Advisory: %s",
 		utils.EscapeMdv2(rt.Exchange.ExchangeName()),
 		utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CurrentBtc)),
 		utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.BtcTreasuryVault)),
@@ -563,6 +564,12 @@ func (b *BtcBot) cmdTreasury(bot *tgbotapi.BotAPI, chatID int64) error {
 				return "🧪 DRY RUN"
 			}
 			return "🔴 LIVE"
+		}(),
+		func() string {
+			if cfg.LLMEnabled {
+				return "✅ ON"
+			}
+			return "❌ OFF"
 		}(),
 	)
 
@@ -1344,6 +1351,16 @@ func (b *BtcBot) cmdSetConfig(bot *tgbotapi.BotAPI, chatID int64, args string) e
 			_, _ = bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("Invalid value: %s", val)))
 			return nil
 		}
+	case "llm_enabled":
+		v, err := strconv.ParseBool(val)
+		if err == nil {
+			cfg.LLMEnabled = v
+			updated = true
+			newValStr = val
+		} else {
+			_, _ = bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("Invalid boolean: %s", val)))
+			return nil
+		}
 	case "daily_loss_limit_btc":
 		v, err := strconv.ParseFloat(val, 64)
 		if err == nil && v >= 0.0 {
@@ -1365,7 +1382,7 @@ func (b *BtcBot) cmdSetConfig(bot *tgbotapi.BotAPI, chatID int64, args string) e
 			return nil
 		}
 	default:
-		reply := "Available keys:\n  take_profit_pct, stop_loss_pct, trailing_tp_pct, use_trailing\n  min_score_threshold, risk_per_trade_pct, max_positions\n  compound_pct, initial_capital_usdt, dry_run\n  enabled, llm_activation_threshold, min_confidence, max_exposure\n  max_consecutive_losses, daily_loss_limit_btc\n\nExample: /btc_setconfig take_profit_pct 6.0"
+		reply := "Available keys:\n  take_profit_pct, stop_loss_pct, trailing_tp_pct, use_trailing\n  min_score_threshold, risk_per_trade_pct, max_positions\n  compound_pct, initial_capital_usdt, dry_run\n  enabled, llm_enabled, llm_activation_threshold, min_confidence, max_exposure\n  max_consecutive_losses, daily_loss_limit_btc\n\nExample: /btc_setconfig llm_enabled false\nExample: /btc_setconfig take_profit_pct 6.0"
 		_, _ = bot.Send(tgbotapi.NewMessage(chatID, reply))
 		return nil
 	}

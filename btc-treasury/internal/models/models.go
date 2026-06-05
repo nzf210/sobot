@@ -189,6 +189,7 @@ type BtcDecisionRecord struct {
 
 type BtcConfig struct {
 	Enabled                bool     `json:"enabled"`
+	LLMEnabled             bool     `json:"llm_enabled"`
 	LlmActivationThreshold float64  `json:"llm_activation_threshold"`
 	MinConfidence          float64  `json:"min_confidence"`
 	MaxExposure            float64  `json:"max_exposure"`
