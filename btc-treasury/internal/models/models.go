@@ -16,6 +16,7 @@ type BtcMarketData struct {
 	ActiveStrategy      string  `json:"active_strategy"`
 	PortfolioExposure   float64 `json:"portfolio_exposure"`
 	DailyDrawdown       float64 `json:"daily_drawdown"`
+	Change5m            float64 `json:"change_5m"` // % price change last 5 minutes
 }
 
 type Ohlcv struct {

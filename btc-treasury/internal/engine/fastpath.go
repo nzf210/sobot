@@ -32,6 +32,13 @@ func QuantFastPath(
 		return &adv
 	}
 
+	// Reject coins with insignificant 5-minute price change — no meaningful movement in 5 min = noise
+	if math.Abs(data.Change5m) < 0.05 {
+		mode := TreasuryMode(data, treasury, riskLevel)
+		adv := QuantAdvisory(data, marketRegime, riskLevel, []string{"No significant 5m price movement"}, opportunity, mode, takerFeePct)
+		return &adv
+	}
+
 	// Clear rejection zone
 	if opportunity < 50.0 && riskLevel != "LOW" {
 		mode := TreasuryMode(data, treasury, riskLevel)
@@ -214,7 +221,8 @@ func ShouldActivateLLM(
 	marketRegime string,
 	cfg *models.BtcConfig,
 ) bool {
-	if opportunity >= 60.0 && opportunity < 80.0 {
+	// Only activate LLM when opportunity is genuinely borderline (70-80) — reduce LLM noise
+	if opportunity >= 70.0 && opportunity < 80.0 {
 		return true
 	}
 	if data.Confidence < cfg.LlmActivationThreshold {

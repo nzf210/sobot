@@ -678,6 +678,17 @@ func (c *OkxClient) GetMarketData(ctx context.Context, symbol string) (models.Bt
 		reversalProb = 0.5
 	}
 
+	// Fetch 5-minute candles for Change5m
+	change5m := 0.0
+	candles5m, err := c.GetKlines(ctx, symbol, "5m", 2)
+	if err == nil && len(candles5m) >= 2 {
+		prevClose := candles5m[0].Close
+		currClose := candles5m[1].Close
+		if prevClose > 0.0 {
+			change5m = (currClose - prevClose) / prevClose * 100.0
+		}
+	}
+
 	return models.BtcMarketData{
 		Pair:                symbol,
 		TrendStrength:       trendStrength,
@@ -689,5 +700,6 @@ func (c *OkxClient) GetMarketData(ctx context.Context, symbol string) (models.Bt
 		ReversalProbability: reversalProb,
 		Confidence:          confidence,
 		ActiveStrategy:      "spot_accumulation",
+		Change5m:            change5m,
 	}, nil
 }

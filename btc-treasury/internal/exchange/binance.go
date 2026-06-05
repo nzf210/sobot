@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -211,12 +212,12 @@ func (c *BinanceClient) GetBalances(ctx context.Context) ([]models.ExchangeBalan
 
 func (c *BinanceClient) GetOpenOrders(ctx context.Context, symbol string) ([]models.BtcAdvisoryPosition, error) {
 	type binanceOrderRaw struct {
-		Symbol   string `json:"symbol"`
-		OrderID  int64  `json:"orderId"`
-		Price    string `json:"price"`
-		OrigQty  string `json:"origQty"`
-		Side     string `json:"side"`
-		Status   string `json:"status"`
+		Symbol  string `json:"symbol"`
+		OrderID int64  `json:"orderId"`
+		Price   string `json:"price"`
+		OrigQty string `json:"origQty"`
+		Side    string `json:"side"`
+		Status  string `json:"status"`
 	}
 
 	var orders []binanceOrderRaw
@@ -232,10 +233,10 @@ func (c *BinanceClient) GetOpenOrders(ctx context.Context, symbol string) ([]mod
 		price, _ := strconv.ParseFloat(o.Price, 64)
 		qty, _ := strconv.ParseFloat(o.OrigQty, 64)
 		results = append(results, models.BtcAdvisoryPosition{
-			ID:            strconv.FormatInt(o.OrderID, 10),
-			EntryPrice:    price,
-			Size:          qty,
-			Side:          o.Side,
+			ID:         strconv.FormatInt(o.OrderID, 10),
+			EntryPrice: price,
+			Size:       qty,
+			Side:       o.Side,
 		})
 	}
 	return results, nil
@@ -503,7 +504,7 @@ func (c *BinanceClient) GetMarketData(ctx context.Context, symbol string) (model
 	if volumeScore > 10.0 {
 		volumeScore = 10.0
 	}
-	
+
 	minDepth := bidDepth
 	if askDepth < minDepth {
 		minDepth = askDepth
@@ -578,6 +579,17 @@ func (c *BinanceClient) GetMarketData(ctx context.Context, symbol string) (model
 		reversalProb = 0.5
 	}
 
+	// Fetch 5-minute candles for Change5m
+	change5m := 0.0
+	candles5m, err := c.GetKlines(ctx, symbol, "5m", 2)
+	if err == nil && len(candles5m) >= 2 {
+		prevClose := candles5m[0].Close
+		currClose := candles5m[1].Close
+		if prevClose > 0.0 {
+			change5m = (currClose - prevClose) / prevClose * 100.0
+		}
+	}
+
 	return models.BtcMarketData{
 		Pair:                symbol,
 		TrendStrength:       trendStrength,
@@ -589,6 +601,7 @@ func (c *BinanceClient) GetMarketData(ctx context.Context, symbol string) (model
 		ReversalProbability: reversalProb,
 		Confidence:          confidence,
 		ActiveStrategy:      "spot_accumulation",
+		Change5m:            change5m,
 	}, nil
 }
 
@@ -600,6 +613,7 @@ func mathAbs(f float64) float64 {
 }
 
 func withRetry(opName string, op func() error) error {
+	log.Println("Retrying operation:", opName)
 	var lastErr error
 	backoff := 1000 * time.Millisecond
 	for attempt := 1; attempt <= 3; attempt++ {
