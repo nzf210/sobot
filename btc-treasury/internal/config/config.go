@@ -82,7 +82,7 @@ func Load() *AppConfig {
 		TelegramReportChatIDs: getEnvWhitelist("TELEGRAM_REPORT_CHAT_IDS"),
 		ExchangeName:          getEnv("EXCHANGE_NAME", "binance"),
 		WalletPassword:        os.Getenv("WALLET_PASSWORD"),
-		ScannerIntervalSecs:   uint64(getEnvInt("BTC_SCANNER_INTERVAL_SECS", 900)),
+		ScannerIntervalSecs:   uint64(getEnvInt("BTC_SCANNER_INTERVAL_SECS", 900)), // 15 min default
 		ReportIntervalMins:    uint64(getEnvInt("BTC_REPORT_INTERVAL_MINS", 5)),
 		ScannerPairs:          scannerPairs,
 		DBDriver:              getEnv("DB_DRIVER", "sqlite"),

@@ -17,6 +17,7 @@ import (
 const (
 	cacheTTLSecs      = 300 // 5 minutes
 	pairCooldownSecs  = 300 // 5 minutes per pair
+	maxLlmCallsPerDay = 50  // max LLM calls per pair per day to control token budget
 )
 
 type cacheEntry struct {
@@ -31,6 +32,10 @@ type AdvisoryEngine struct {
 	cacheLock    sync.RWMutex
 	lastLlmCall  map[string]time.Time
 	cooldownLock sync.RWMutex
+	// Token budget: track LLM calls per pair per day
+	llmCallsToday map[string]int       // pair -> count
+	llmCallsDate  map[string]time.Time // pair -> last reset date
+	llmBudgetLock sync.RWMutex
 }
 
 func NewAdvisoryEngine(llmURL, llmModel, llmAPIKey string, mem memory.Store) *AdvisoryEngine {
@@ -84,6 +89,20 @@ func (ae *AdvisoryEngine) cooldownElapsed(pair string) bool {
 	return true
 }
 
+// isLlmBudgetExceeded checks if pair has exceeded daily LLM call budget
+func (ae *AdvisoryEngine) isLlmBudgetExceeded(pair string) bool {
+	ae.llmBudgetLock.RLock()
+	defer ae.llmBudgetLock.RUnlock()
+
+	today := time.Now().UTC().Format("2006-01-02")
+	lastDate, hasDate := ae.llmCallsDate[pair]
+	if !hasDate || lastDate.UTC().Format("2006-01-02") != today {
+		return false // new day, budget reset
+	}
+	count, hasCount := ae.llmCallsToday[pair]
+	return hasCount && count >= maxLlmCallsPerDay
+}
+
 func (ae *AdvisoryEngine) markLlmCalled(pair string) {
 	ae.cooldownLock.Lock()
 	defer ae.cooldownLock.Unlock()
@@ -98,6 +117,16 @@ func (ae *AdvisoryEngine) markLlmCalled(pair string) {
 			}
 		}
 	}
+
+	// Track daily LLM calls for token budget
+	ae.llmBudgetLock.Lock()
+	defer ae.llmBudgetLock.Unlock()
+	if ae.llmCallsToday == nil {
+		ae.llmCallsToday = make(map[string]int)
+		ae.llmCallsDate = make(map[string]time.Time)
+	}
+	ae.llmCallsToday[pair]++
+	ae.llmCallsDate[pair] = time.Now().UTC()
 }
 
 const systemPrompt = `BTC Treasury Accumulation AI. Goal: maximize Δ BTC (not USD).
@@ -182,6 +211,12 @@ func (ae *AdvisoryEngine) Analyze(ctx context.Context, input *models.BtcAdvisory
 	// ── COOLDOWN GATE ────────────────────────────────────────────────
 	if !ae.cooldownElapsed(input.MarketData.Pair) {
 		log.Printf("BTC [%s]: cooldown active, returning quant fallback", input.MarketData.Pair)
+		return QuantAdvisory(&input.MarketData, marketRegime, riskLevel, warnings, opportunity, treasuryMode, cfg.TakerFeePct)
+	}
+
+	// ── TOKEN BUDGET GATE ────────────────────────────────────────────
+	if ae.isLlmBudgetExceeded(input.MarketData.Pair) {
+		log.Printf("BTC [%s]: LLM daily budget exceeded (%d calls), returning quant fallback", input.MarketData.Pair, maxLlmCallsPerDay)
 		return QuantAdvisory(&input.MarketData, marketRegime, riskLevel, warnings, opportunity, treasuryMode, cfg.TakerFeePct)
 	}
 

@@ -214,6 +214,9 @@ func OpportunityScore(data *models.BtcMarketData) float64 {
 	return math.Round(score*10.0*10.0) / 10.0
 }
 
+// ShouldActivateLLM decides whether to call LLM or use quant-only advisory.
+// LLM activates for scores >= 70 — pairs near approval threshold need LLM validation.
+// Quant fallback for scores < 70 (below approval zone, not worth LLM tokens).
 func ShouldActivateLLM(
 	opportunity float64,
 	data *models.BtcMarketData,
@@ -221,24 +224,13 @@ func ShouldActivateLLM(
 	marketRegime string,
 	cfg *models.BtcConfig,
 ) bool {
-	// Only activate LLM when opportunity is genuinely borderline (70-80) — reduce LLM noise
-	if opportunity >= 70.0 && opportunity < 80.0 {
+	// Scores >= 80: strong signal, call LLM to verify before approving
+	// Scores 70-80: borderline, LLM helps decide
+	if opportunity >= 70.0 {
 		return true
 	}
-	if data.Confidence < cfg.LlmActivationThreshold {
-		return true
-	}
-	if data.DailyDrawdown > 0.03 {
-		return true
-	}
-	if (data.VolatilityScore > cfg.SafeModeVolatility || data.LiquidityScore < 4.0) &&
-		(marketRegime == "TRENDING_BULLISH" ||
-			marketRegime == "TRENDING_BEARISH" ||
-			marketRegime == "BREAKOUT_EXPANSION" ||
-			marketRegime == "ACCUMULATION") {
-		return true
-	}
-	if riskLevel == "MEDIUM" && opportunity >= 70.0 && opportunity < 80.0 {
+	// Low confidence but trending: use LLM to validate direction
+	if data.Confidence < 0.5 && opportunity >= 60.0 {
 		return true
 	}
 	return false

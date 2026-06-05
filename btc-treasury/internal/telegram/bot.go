@@ -73,6 +73,23 @@ const helpText = `🤖 *BTC Treasury Accumulation*
 /btc_setcreds \<api\_key\> \<api\_secret\> \[passphrase\] — Update exchange API credentials live
 /btc_enable — Enable LLM advisory
 /btc_disable — Disable LLM advisory
+/btc_report — Show report settings \(interval, enabled\)
+/btc_setreport \<interval\_mins\> — Set report interval \(0=disabled\)
+
+*Config Setup Guide*
+\- Scanner Interval: /btc\_setconfig scanner\_interval \<seconds\> \(default: 900\=15min\)
+\- Report Interval: /btc\_setreport \<minutes\> \(0=disabled, default: 5\)
+\- LLM Threshold: /btc\_setconfig min\_score\_threshold \<0\-100\> \(default: 80\)
+\- Risk/Trade: /btc\_setconfig risk\_per\_trade\_pct \<0\-100\>
+\- TP: /btc\_setconfig take\_profit\_pct \<0\-100\>
+\- SL: /btc\_setconfig stop\_loss\_pct \<negative\>
+\- Trailing TP: /btc\_setconfig trailing\_tp\_pct \<0\-100\>
+\- Compound %: /btc\_setconfig compound\_pct \<0\-100\>
+\- BTC Vault %: /btc\_setconfig treasury\_pct \<0\-100\>
+
+*Report Chat IDs \(ENV\)*
+Set TELEGRAM\_REPORT\_CHAT\_IDS env var to receive periodic reports\.
+Multiple IDs: TELEGRAM\_REPORT\_CHAT\_IDS=123,456,789
 
 *Info*
 /btc_skills — Full bot capabilities
@@ -158,14 +175,15 @@ On every winning close:
 *Exchange: Binance Spot only — NO futures, NO perpetual, NO leverage*`
 
 type BtcBot struct {
-	token         string
-	whitelist     []int64
-	engine        *engine.AdvisoryEngine
-	mem           memory.Store
-	scanner       *scanner.ScannerState
-	perAccount    map[exchange.AccountKey]*runtime.AccountRuntime
-	activeAccount map[int64]exchange.AccountKey
-	activeAccLock sync.RWMutex
+	token          string
+	whitelist      []int64
+	engine         *engine.AdvisoryEngine
+	mem            memory.Store
+	scanner        *scanner.ScannerState
+	perAccount     map[exchange.AccountKey]*runtime.AccountRuntime
+	activeAccount  map[int64]exchange.AccountKey
+	activeAccLock  sync.RWMutex
+	reportInterval uint64 // minutes, 0 = disabled
 }
 
 func NewBtcBot(
@@ -175,15 +193,17 @@ func NewBtcBot(
 	mem memory.Store,
 	scanner *scanner.ScannerState,
 	perAccount map[exchange.AccountKey]*runtime.AccountRuntime,
+	reportInterval uint64,
 ) *BtcBot {
 	return &BtcBot{
-		token:         token,
-		whitelist:     whitelist,
-		engine:        engine,
-		mem:           mem,
-		scanner:       scanner,
-		perAccount:    perAccount,
-		activeAccount: make(map[int64]exchange.AccountKey),
+		token:          token,
+		whitelist:      whitelist,
+		engine:         engine,
+		mem:            mem,
+		scanner:        scanner,
+		perAccount:     perAccount,
+		activeAccount:  make(map[int64]exchange.AccountKey),
+		reportInterval: reportInterval,
 	}
 }
 
@@ -374,6 +394,10 @@ func (b *BtcBot) handleMessage(ctx context.Context, bot *tgbotapi.BotAPI, msg *t
 		err = b.cmdAggregate(bot, chatID)
 	case "btcsetcreds":
 		err = b.cmdSetCreds(ctx, bot, chatID, args)
+	case "btcreport":
+		err = b.cmdReport(bot, chatID)
+	case "btcsetreport":
+		err = b.cmdSetReport(bot, chatID, args)
 	default:
 		reply := tgbotapi.NewMessage(chatID, "Unknown command. Use /help")
 		_, _ = bot.Send(reply)
@@ -619,7 +643,8 @@ func (b *BtcBot) cmdPositions(bot *tgbotapi.BotAPI, chatID int64) error {
 	return err
 }
 
-func (b *BtcBot) cmdScan(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64, args string) error {
+func (b *BtcBot) cmdScan(_ context.Context, bot *tgbotapi.BotAPI, chatID int64, args string) error {
+
 	rt := b.resolveRuntime(chatID)
 	if rt == nil {
 		_, err := utils.SendMdv2Safe(bot, chatID, "Scanner not active")
@@ -919,7 +944,7 @@ func (b *BtcBot) cmdRemovePair(bot *tgbotapi.BotAPI, chatID int64, args string) 
 	return err
 }
 
-func (b *BtcBot) cmdDiscover(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64) error {
+func (b *BtcBot) cmdDiscover(_ context.Context, bot *tgbotapi.BotAPI, chatID int64) error {
 	rt := b.resolveRuntime(chatID)
 	if rt == nil {
 		_, err := utils.SendMdv2Safe(bot, chatID, "Exchange not configured")
@@ -961,7 +986,7 @@ func (b *BtcBot) cmdDiscover(ctx context.Context, bot *tgbotapi.BotAPI, chatID i
 	return err
 }
 
-func (b *BtcBot) cmdPairInfo(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64, args string) error {
+func (b *BtcBot) cmdPairInfo(_ context.Context, bot *tgbotapi.BotAPI, chatID int64, args string) error {
 	pair := strings.TrimSpace(strings.ToUpper(args))
 	if pair == "" {
 		reply := "Usage: /btc_pairinfo <PAIR>\nExample: /btc_pairinfo SOLBTC"
@@ -1669,10 +1694,10 @@ func (b *BtcBot) cmdSell(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64
 			lesson := fmt.Sprintf("[BTC][MANUAL] %s: PnL %.2f%%. Size: %.6f. Manual close.", pos.ID, pos.PnlBtc, pos.Size)
 			rt.Mem.AddLesson(lesson)
 			results = append(results, fmt.Sprintf("✅ %s closed — %s @ %s \\| PnL: %s%%",
-					utils.EscapeMdv2(pos.ID),
-					utils.EscapeMdv2(fmt.Sprintf("%.6f", pos.Size)),
-					utils.EscapeMdv2(order.OrderID),
-					utils.EscapeMdv2(fmt.Sprintf("%.2f", pos.PnlBtc))))
+				utils.EscapeMdv2(pos.ID),
+				utils.EscapeMdv2(fmt.Sprintf("%.6f", pos.Size)),
+				utils.EscapeMdv2(order.OrderID),
+				utils.EscapeMdv2(fmt.Sprintf("%.2f", pos.PnlBtc))))
 		} else {
 			results = append(results, fmt.Sprintf("❌ %s failed: %v", utils.EscapeMdv2(pos.ID), err))
 		}
@@ -2072,6 +2097,15 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 	var aggBtc, aggVault, aggCompound float64
 	var aggTrades, aggWins uint64
 
+	// Get BTC price for USD conversion
+	btcPrice := 0.0
+	if len(runtimes) > 0 {
+		p, err := runtimes[0].Exchange.GetCurrentPrice(ctx, "BTCUSDT")
+		if err == nil && p > 0 {
+			btcPrice = p
+		}
+	}
+
 	for _, rt := range runtimes {
 		balances, err := rt.Exchange.GetBalances(ctx)
 		if err != nil {
@@ -2111,69 +2145,121 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 			header = fmt.Sprintf("💼 *Account — %s*", utils.EscapeMdv2(rt.Exchange.ExchangeName()))
 		}
 
-		var heartbeatLine string
+		// Health check
 		hb := rt.Status.HeartbeatUnix()
 		restarts := rt.Status.Restarts()
-		if hb == 0 {
-			heartbeatLine = "Health: ⚠️ No heartbeat yet"
-		} else {
+		healthIcon := "⚠️"
+		healthText := "No heartbeat"
+		if hb > 0 {
 			ageSecs := time.Now().Unix() - hb
 			if ageSecs < 0 {
 				ageSecs = 0
 			}
+			if ageSecs < 120 {
+				healthIcon = "✅"
+			} else if ageSecs < 300 {
+				healthIcon = "⚡"
+			}
 			restartTxt := ""
 			if restarts > 0 {
-				restartTxt = fmt.Sprintf(" \\| ⚠️ Restarts: %s", utils.EscapeMdv2(fmt.Sprintf("%d", restarts)))
+				restartTxt = fmt.Sprintf(" | ⚠️ Restarts: %d", restarts)
 			}
-			heartbeatLine = fmt.Sprintf("Health: ✅ Last tick %sd ago%s", utils.EscapeMdv2(fmt.Sprintf("%d", ageSecs)), restartTxt)
+			healthText = fmt.Sprintf("tick %ds ago%s", ageSecs, restartTxt)
 		}
+
+		// Win rate
+		var winRate float64
+		if ts.TotalTrades > 0 {
+			winRate = float64(ts.WinningTrades) / float64(ts.TotalTrades) * 100.0
+		}
+
+		// BTC value in USD
+		btcValueUsd := ts.CurrentBtc * btcPrice
 
 		lines := []string{
 			header,
-			fmt.Sprintf("Exchange: %s", utils.EscapeMdv2(rt.Exchange.ExchangeName())),
-			fmt.Sprintf("Mode: %s", func() string {
-				if cfg.DryRun {
-					return "🧪 DRY RUN"
-				}
-				return "🔴 LIVE"
-			}()),
-			fmt.Sprintf("API Key: `%s`", utils.EscapeMdv2(rt.Exchange.APIKeyDisplay())),
-			heartbeatLine,
-			fmt.Sprintf("%s: %s free \\| %s locked",
+			fmt.Sprintf("Mode: %s | Health: %s %s",
+				func() string {
+					if cfg.DryRun {
+						return "🧪 DRY RUN"
+					}
+					return "🔴 LIVE"
+				}(),
+				healthIcon,
+				healthText),
+			fmt.Sprintf("API: `%s`", utils.EscapeMdv2(rt.Exchange.APIKeyDisplay())),
+			"",
+			"📊 *Balance*",
+			fmt.Sprintf("%s: %s \\(%.2f USD\\) | %s locked",
 				utils.EscapeMdv2(stableAsset),
 				utils.EscapeMdv2(fmt.Sprintf("%.2f", stableFree)),
+				stableFree,
 				utils.EscapeMdv2(fmt.Sprintf("%.2f", stableLocked))),
-			"",
-			"🏦 *BTC Treasury*",
-			fmt.Sprintf("BTC Holdings: %s", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CurrentBtc))),
-			fmt.Sprintf("BTC Vault: %s", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.BtcTreasuryVault))),
-			fmt.Sprintf("Compound: %s", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CompoundBalance))),
-			fmt.Sprintf("Trades: %s \\| Win: %s \\| Loss: %s",
-				utils.EscapeMdv2(fmt.Sprintf("%d", ts.TotalTrades)),
-				utils.EscapeMdv2(fmt.Sprintf("%d", ts.WinningTrades)),
-				utils.EscapeMdv2(fmt.Sprintf("%d", ts.LosingTrades))),
 		}
 
+		// BTC info with USD value
+		if btcPrice > 0 {
+			lines = append(lines, fmt.Sprintf("BTC: %s \\(≈%.2f USD\\)",
+				utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CurrentBtc)),
+				btcValueUsd))
+		} else {
+			lines = append(lines, fmt.Sprintf("BTC: %s",
+				utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CurrentBtc))))
+		}
+
+		lines = append(lines, "", "🏦 *Treasury*")
+		lines = append(lines, fmt.Sprintf("Total BTC: %s", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CurrentBtc))))
+		lines = append(lines, fmt.Sprintf("Vault: %s \\(untouchable\\)", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.BtcTreasuryVault))))
+		lines = append(lines, fmt.Sprintf("Compound: %s", utils.EscapeMdv2(fmt.Sprintf("%.8f", ts.CompoundBalance))))
+
+		if btcPrice > 0 {
+			lines = append(lines, fmt.Sprintf("Vault Value: ≈%.2f USD", ts.BtcTreasuryVault*btcPrice))
+		}
+
+		// Growth stats
+		growthIcon := "📈"
+		if ts.BtcGrowth7d < 0 {
+			growthIcon = "📉"
+		}
+		lines = append(lines, "", "📈 *Performance*")
+		lines = append(lines, fmt.Sprintf("%s 7d Growth: %s%%", growthIcon, utils.EscapeMdv2(fmt.Sprintf("%.2f", ts.BtcGrowth7d*100.0))))
+		lines = append(lines, fmt.Sprintf("30d Growth: %s%%", utils.EscapeMdv2(fmt.Sprintf("%.2f", ts.BtcGrowth30d*100.0))))
+		lines = append(lines, fmt.Sprintf("Trades: %d \\(Win: %d | Loss: %d\\) — WR: %s%%",
+			ts.TotalTrades,
+			ts.WinningTrades,
+			ts.LosingTrades,
+			utils.EscapeMdv2(fmt.Sprintf("%.0f", winRate))))
+
+		// Pause status
 		if ts.TradingPausedUntil != "" {
-			lines = append(lines, fmt.Sprintf("⏸️ *Paused Until:* %s", utils.EscapeMdv2(ts.TradingPausedUntil)))
-		}
-
-		var otherLines []string
-		for _, b := range balances {
-			if b.Asset != "USDT" && b.Asset != "USDC" {
-				if b.Free > 0 || b.Locked > 0 {
-					otherLines = append(otherLines, fmt.Sprintf("%s: %s free \\| %s locked",
-						utils.EscapeMdv2(b.Asset),
-						utils.EscapeMdv2(fmt.Sprintf("%.8f", b.Free)),
-						utils.EscapeMdv2(fmt.Sprintf("%.8f", b.Locked))))
+			if paused, err := time.Parse(time.RFC3339, ts.TradingPausedUntil); err == nil {
+				if time.Now().UTC().Before(paused.UTC()) {
+					lines = append(lines, "", fmt.Sprintf("⏸️ *Paused until:* %s", utils.EscapeMdv2(paused.Format("2006-01-02 15:04 UTC"))))
 				}
 			}
 		}
-		if len(otherLines) > 0 {
-			lines = append(lines, "", "*Other Assets:*")
-			lines = append(lines, otherLines...)
+
+		// Open positions from memory
+		positions := rt.Mem.GetPositions()
+		if len(positions) > 0 {
+			lines = append(lines, "", "📂 *Open Positions*")
+			for i, p := range positions {
+				pnlIcon := "📊"
+				if p.PnlBtc > 0 {
+					pnlIcon = "🟢"
+				} else if p.PnlBtc < 0 {
+					pnlIcon = "🔴"
+				}
+				lines = append(lines, fmt.Sprintf("%d\\. %s %s — Entry: %s | PnL: %s%%",
+					i+1,
+					pnlIcon,
+					utils.EscapeMdv2(p.ID),
+					utils.EscapeMdv2(fmt.Sprintf("%.8f", p.EntryPrice)),
+					utils.EscapeMdv2(fmt.Sprintf("%.2f", p.PnlBtc))))
+			}
 		}
 
+		// Open orders from exchange
 		pairs := rt.ScannerState.GetPairs()
 		var allOrders []models.BtcAdvisoryPosition
 		for _, p := range pairs {
@@ -2184,18 +2270,46 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 		}
 
 		if len(allOrders) > 0 {
-			lines = append(lines, "", "*Open Orders:*")
+			lines = append(lines, "", "📋 *Exchange Orders*")
 			for _, o := range allOrders {
-				lines = append(lines, fmt.Sprintf(
-					"%s %s: %s @ %s \\| TP: %s%% \\| SL: %s%%",
-					utils.EscapeMdv2(o.Side),
+				sideIcon := "📤"
+				if strings.ToLower(o.Side) == "buy" {
+					sideIcon = "📥"
+				}
+				lines = append(lines, fmt.Sprintf("%s %s: %s @ %s | TP: %s%% | SL: %s%%",
+					sideIcon,
 					utils.EscapeMdv2(o.ID),
-					utils.EscapeMdv2(fmt.Sprintf("%.8f", o.Size)),
+					utils.EscapeMdv2(fmt.Sprintf("%.6f", o.Size)),
 					utils.EscapeMdv2(fmt.Sprintf("%.8f", o.EntryPrice)),
 					utils.EscapeMdv2(fmt.Sprintf("%.1f", o.TakeProfitPct)),
-					utils.EscapeMdv2(fmt.Sprintf("%.1f", o.StopLossPct)),
-				))
+					utils.EscapeMdv2(fmt.Sprintf("%.1f", o.StopLossPct))))
 			}
+		}
+
+		// Scanner stats
+		snapshots := rt.ScannerState.AllSnapshots()
+		if len(snapshots) > 0 {
+			var totalScanned int
+			var approveCnt, monitorCnt, protectCnt, rejectCnt int
+			for _, s := range snapshots {
+				totalScanned += int(s.Stats.Scanned)
+				switch s.LastRecommendation {
+				case "APPROVE":
+					approveCnt++
+				case "MONITOR":
+					monitorCnt++
+				case "PROTECT_TREASURY", "ENABLE_SAFE_MODE", "REDUCE_EXPOSURE":
+					protectCnt++
+				default:
+					if s.LastRecommendation != "" {
+						rejectCnt++
+					}
+				}
+			}
+			lines = append(lines, "", "🔍 *Scanner*")
+			lines = append(lines, fmt.Sprintf("Pairs: %d | Scans: %d", len(snapshots), totalScanned))
+			lines = append(lines, fmt.Sprintf("✅ %d | 👁 %d | 🛡 %d | ❌ %d",
+				approveCnt, monitorCnt, protectCnt, rejectCnt))
 		}
 
 		blocks = append(blocks, strings.Join(lines, "\n"))
@@ -2206,19 +2320,97 @@ func renderStatus(ctx context.Context, runtimes []*runtime.AccountRuntime) (stri
 		if aggTrades > 0 {
 			overallWR = float64(aggWins) / float64(aggTrades) * 100.0
 		}
+		totalUsd := aggBtc * btcPrice
 		footer := fmt.Sprintf(
-			"\n──────────\n*Aggregate — [%s]*\nBTC: %s \\| Vault: %s \\| Compound: %s \\| Trades: %s \\(win %s%%\\)",
+			"\n──────────\n*Aggregate — [%s]*\nBTC: %s \\(≈%.2f USD\\) | Vault: %s | Compound: %s\nTrades: %d \\(win %s%%\\)",
 			utils.EscapeMdv2(runtimes[0].AccountID),
 			utils.EscapeMdv2(fmt.Sprintf("%.8f", aggBtc)),
+			totalUsd,
 			utils.EscapeMdv2(fmt.Sprintf("%.8f", aggVault)),
 			utils.EscapeMdv2(fmt.Sprintf("%.8f", aggCompound)),
-			utils.EscapeMdv2(fmt.Sprintf("%d", aggTrades)),
+			aggTrades,
 			utils.EscapeMdv2(fmt.Sprintf("%.0f", overallWR)),
 		)
 		blocks = append(blocks, footer)
 	}
 
+	// Add BTC price footer if available
+	if btcPrice > 0 {
+		blocks = append(blocks, fmt.Sprintf("\n*BTC Price:* %.2f USD", btcPrice))
+	}
+
 	return strings.Join(blocks, "\n\n"), nil
+}
+
+func (b *BtcBot) cmdReport(bot *tgbotapi.BotAPI, chatID int64) error {
+	var lines []string
+	lines = append(lines, "📊 *Report Configuration*")
+
+	// Report interval
+	if b.reportInterval == 0 {
+		lines = append(lines, "Status: ❌ Disabled")
+	} else {
+		lines = append(lines, "Status: ✅ Enabled")
+		lines = append(lines, fmt.Sprintf("Interval: %d min", b.reportInterval))
+	}
+
+	// Report chat IDs info
+	lines = append(lines, "", "*Report Chat IDs*")
+	lines = append(lines, "Configure via TELEGRAM_REPORT_CHAT_IDS env var")
+	lines = append(lines, "Format: TELEGRAM_REPORT_CHAT_IDS=123,456,789")
+	lines = append(lines, "Restart service after changing env var")
+
+	// Scanner interval
+	lines = append(lines, "", "*Scanner Interval*")
+	lines = append(lines, "Configure via BTC_SCANNER_INTERVAL_SECS env var (default: 900 = 15 min)")
+
+	lines = append(lines, "", "*Set Report Interval*")
+	lines = append(lines, "/btc_setreport 0 — disable reports")
+	lines = append(lines, "/btc_setreport 5 — every 5 minutes")
+	lines = append(lines, "/btc_setreport 15 — every 15 minutes")
+	lines = append(lines, "/btc_setreport 60 — every hour")
+
+	_, err := utils.SendMdv2Safe(bot, chatID, strings.Join(lines, "\n"))
+	return err
+}
+
+func (b *BtcBot) cmdSetReport(bot *tgbotapi.BotAPI, chatID int64, args string) error {
+	raw := strings.TrimSpace(args)
+	if raw == "" {
+		reply := "Usage: /btc_setreport <interval_minutes>\n\n" +
+			"  /btc_setreport 0  — disable periodic reports\n" +
+			"  /btc_setreport 5  — every 5 minutes\n" +
+			"  /btc_setreport 15 — every 15 minutes\n" +
+			"  /btc_setreport 60 — every hour\n\n" +
+			"Note: This setting is runtime-only. For persistent config, set BTC_REPORT_INTERVAL_MINS env var before starting the service."
+		_, err := bot.Send(tgbotapi.NewMessage(chatID, reply))
+		return err
+	}
+
+	interval, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || interval < 0 || interval > 1440 {
+		_, err := bot.Send(tgbotapi.NewMessage(chatID, "Invalid interval. Must be 0-1440 minutes (0 = disable)."))
+		return err
+	}
+
+	b.reportInterval = uint64(interval)
+
+	var reply string
+	if interval == 0 {
+		reply = "✅ *Reports disabled*\nPeriodic reports are now OFF."
+	} else {
+		reply = fmt.Sprintf("✅ *Report interval set to %d min*\nPeriodic reports enabled.", interval)
+	}
+	_, err = utils.SendMdv2Safe(bot, chatID, reply)
+	return err
+}
+
+func (b *BtcBot) getConfigForChat(chatID int64) models.BtcConfig {
+	rt := b.resolveRuntime(chatID)
+	if rt != nil {
+		return rt.Mem.GetConfig()
+	}
+	return models.BtcConfig{}
 }
 
 func btcPriceForConversion(ctx context.Context, ex exchange.ExchangeClient, pair string) float64 {
@@ -2275,7 +2467,7 @@ func validatePairToken(raw string) (string, error) {
 // OKX requires passphrase; Binance does not.
 // Credentials are saved to btc-accounts.json (JSON store) or account_exchanges table (DB store).
 // The exchange client is hot-reloaded in-memory immediately after saving.
-func (b *BtcBot) cmdSetCreds(ctx context.Context, bot *tgbotapi.BotAPI, chatID int64, args string) error {
+func (b *BtcBot) cmdSetCreds(_ context.Context, bot *tgbotapi.BotAPI, chatID int64, args string) error {
 	rt := b.resolveRuntime(chatID)
 	if rt == nil {
 		_, err := utils.SendMdv2Safe(bot, chatID, "No account bound. Use /btc_use first.")

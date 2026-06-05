@@ -203,6 +203,7 @@ func main() {
 			defaultMem,
 			defaultScanner,
 			runtimes,
+			cfg.ReportIntervalMins,
 		)
 		log.Printf("BTC Telegram bot starting...")
 		go bot.Start(ctx)
